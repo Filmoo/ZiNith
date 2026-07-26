@@ -27,7 +27,7 @@ Phases follow §12 of the spec delta.
 | P5 | Coach: auto-run on game end, grade cache, overlays | **done** — grades cached in IndexedDB, recomputed lazily on `v` change |
 | P6 | Metric modes + comparison | not started |
 | P7 | Pattern library, frequency instrumentation, drills | catalogue + dual-metric instrumentation done; **drill ladder not built** |
-| P8 | Learning mode: blocking, hints, undo | not started |
+| P8 | Learning mode: blocking, hints, undo | **live hints done**; move blocking and undo not built |
 | P9 | Android via Capacitor | pipeline done; export/import must precede shipping (§15) |
 | P10 | Cloud sync | not started |
 
@@ -199,12 +199,41 @@ by `(seed, firstClick)`, so a pool cannot pre-commit the player's opening cell.
 A pooled *seed* must therefore be validated against the actual first click, with
 the generating state shown if the Expert pool runs dry.
 
+## Learning mode
+
+Toggle it in the topbar (◎) or the settings sheet. From the first click the board
+marks every cell the solver can prove — green rings for safe, red crosses for
+mines — and the footer names the pattern carrying the proof.
+
+It shows *everything* provable rather than one "best move". Optimal is rarely
+unique, and §7.3 already flags that trap for move blocking: naming a single cell
+would misrepresent a position with four equally good ones. The readout also says
+when nothing is provable, which is the one thing a player cannot work out alone —
+that the guess in front of them is forced rather than a gap in their reading.
+
+Chord safety is forced on in this mode. Games are recorded and gradeable but
+excluded from personal bests, and the flag lives on the replay so it survives
+export/import: a time set with every certainty on screen is not comparable to one
+set blind.
+
+Not yet built, both from §7.3: non-optimal **move blocking** (which must compare
+click *cost*, never move identity, or ties get rejected and the mode becomes
+infuriating) and **undo**. Opening a mine in learning mode still ends the game.
+
 ## Verification state
 
-Checked in desktop Chrome against the dev server: the app boots with no console
-errors, the layout sizes correctly, the idle grid renders, a first tap generates
-a board and cascades, and the timer starts from zero. That pass fixed two
-blockers — see git history — and the first click had previously been impossible.
+Checked in desktop Chromium against the dev server: the app boots with no console
+errors, the idle grid renders, a first click generates a board and cascades, and
+the timer starts from zero. History rows persist across a reload, the mistake
+filter narrows to the right games, replay reconstructs and overlays proofs, and
+learning mode is playable end to end by following its own hints — 3BV climbs and
+the hint readout changes on every move.
+
+Each pass has found something reasoning did not. The most recent: the play board
+had been collapsing to about 240px since the P4 commit, because the wrapper that
+hides PlayScreen behind history was a plain auto-height div and `.app` is
+`height: 100%`. History and replay are `position: fixed`, so the P4 pass never
+looked at the screen that broke.
 
 Still unverified, because a desktop browser cannot answer it:
 
