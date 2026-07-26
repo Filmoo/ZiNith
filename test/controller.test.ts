@@ -133,3 +133,64 @@ test('metrics: flags earn no 3BV credit', () => {
   g.flag(hidden)
   assert.equal(g.snapshot().threeBVDone, done, 'flagging clears nothing')
 })
+
+test('undo: the opening click cannot be undone', () => {
+  const g = new Game(cfg())
+  g.open(40)
+  const seedBefore = g.replay!.seed
+  const eventsBefore = g.replay!.events.length
+  g.undo()
+  assert.equal(g.replay!.events.length, eventsBefore, 'nothing to drop below the opening click')
+  assert.equal(g.replay!.seed, seedBefore, 'the board must not regenerate')
+})
+
+test('undo: removes exactly the last move and its 3BV credit', () => {
+  const g = new Game(cfg())
+  g.open(40)
+  const hidden = g.board!.state.findIndex((s: number) => s === HIDDEN)
+  g.flag(hidden)
+  const afterFlag = g.snapshot()
+  assert.equal(g.board!.state[hidden], 2 /* FLAGGED */)
+
+  g.undo()
+  const afterUndo = g.snapshot()
+  assert.equal(g.board!.state[hidden], HIDDEN, 'the flag must be gone')
+  assert.equal(afterUndo.clicks, afterFlag.clicks - 1)
+  assert.equal(g.replay!.events.length, 1, 'opening click and nothing else')
+})
+
+test('undo: rebuilds the identical board, not a new one', () => {
+  const g = new Game(cfg())
+  g.open(40)
+  const mines = [...g.board!.mines]
+  const hidden = g.board!.state.findIndex((s: number) => s === HIDDEN)
+  g.flag(hidden)
+  g.undo()
+  assert.deepEqual([...g.board!.mines], mines, 'undo must not reroll the board')
+})
+
+test('undo: taking back the fatal click un-loses the game', () => {
+  const g = new Game(cfg({ noGuess: false }))
+  g.open(40)
+  // Open every hidden cell until one is a mine, to reach a loss deterministically.
+  for (let i = 0; i < g.board!.state.length && g.phase === 'playing'; i++) {
+    if (g.board!.state[i] === HIDDEN) g.open(i)
+  }
+  assert.equal(g.phase, 'lost')
+  assert.ok(g.board!.exploded)
+
+  g.undo()
+  assert.equal(g.phase, 'playing', 'undo must un-finish the game')
+  assert.ok(!g.board!.exploded)
+  assert.equal(g.replay!.result, 'abandoned')
+})
+
+test('undo: elapsed time keeps flowing from the original start, not reset', () => {
+  const g = new Game(cfg())
+  g.open(40)
+  const hidden = g.board!.state.findIndex((s: number) => s === HIDDEN)
+  g.flag(hidden)
+  const before = g.elapsedMs()
+  g.undo()
+  assert.ok(g.elapsedMs() >= before - 5, 'undo must not rewind the clock')
+})

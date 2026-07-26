@@ -3,7 +3,7 @@ import {
   type Board, type BoardSpec,
 } from '../../engine/board.ts'
 import { generateNoGuess } from '../../engine/generate.ts'
-import { newReplay, type Replay, type PresetId, type EventType } from '../../engine/replay.ts'
+import { newReplay, specOf, type Replay, type ReplayEvent, type PresetId, type EventType } from '../../engine/replay.ts'
 import { threeBV } from '../../engine/metrics/threebv.ts'
 import { HIDDEN, FLAGGED } from '../../engine/types.ts'
 
@@ -182,6 +182,67 @@ export class Game {
     this.replay!.events.push({ t: Math.round(t), type, cell })
     this.ticks.push({ type, atMs: t, durMs: t - this.lastMoveMs })
     this.lastMoveMs = t
+  }
+
+  /**
+   * Reapplies an already-recorded event during `undo`'s rebuild, preserving its
+   * original timestamp rather than stamping a new one off the wall clock. Never
+   * called during live play.
+   */
+  private replayEvent(e: ReplayEvent): void {
+    const b = this.board!
+    let revealed: number[] = []
+    if (e.type === 'open') revealed = open(b, e.cell)
+    else if (e.type === 'chord') revealed = chord(b, e.cell)
+    else toggleFlag(b, e.cell)
+    this.markDirty(revealed)
+    this.creditBV(revealed)
+    this.clicks++
+    this.replay!.events.push(e)
+    this.ticks.push({ type: e.type, atMs: e.t, durMs: e.t - this.lastMoveMs })
+    this.lastMoveMs = e.t
+  }
+
+  /**
+   * §7.3 — learning mode only; the caller enforces that timed play never wires
+   * this up. Rebuilds the board from the seed and replays every event but the
+   * last, rather than keeping separate undo state: a board is already fully
+   * determined by `(seed, firstClick)` plus its events, so a shorter prefix of
+   * something already trusted is all "undo" needs to be.
+   *
+   * Callable after a win or loss too — taking back the fatal click is exactly
+   * what a training tool is for. The rebuilt state is never finished, because
+   * the dropped event is the only one that could have finished it: `open` and
+   * `chord` both refuse to record anything once `phase` leaves `'playing'`, so
+   * no event before the last one could have ended the game without the replay
+   * already having stopped there.
+   */
+  undo(): void {
+    if (!this.board || !this.replay) return
+    const events = this.replay.events
+    // The opening click cannot be undone: there is no board without it.
+    if (events.length <= 1) return
+
+    const keep = events.slice(0, -1)
+    const spec = specOf(this.replay)
+    this.board = createBoard(spec)
+    const bv = threeBV(this.board)
+    this.bv = bv.value
+    this.openingOf = bv.openingOf
+    this.bvCredited = new Uint8Array(this.size)
+    this.openingsDone = new Set()
+    this.isolatedDone = 0
+    this.clicks = 0
+    this.ticks = []
+    this.lastMoveMs = 0
+    this.replay.events = []
+    this.replay.result = 'abandoned'
+    this.phase = 'playing'
+
+    for (const e of keep) this.replayEvent(e)
+
+    for (let i = 0; i < this.size; i++) this.dirty.add(i)
+    this.emit()
   }
 
   private settle() {

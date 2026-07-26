@@ -23,11 +23,11 @@ Phases follow §12 of the spec delta.
 | P1 | Engine — board, RNG, solver tiers 1–4, 3BV/ZiNi/HZiNi | **done, test-verified** |
 | P2 | Playable — canvas, input, control schemes | done for mouse and touch; gestures need on-device tuning |
 | P3 | Presets + no-guess pool | preset table done; **pool not built** |
-| P4 | Replay capture, solve ribbon, history screen | not started |
-| P5 | Coach: auto-run on game end, grade cache, overlays | not started |
+| P4 | Replay capture, solve ribbon, history screen | ribbon done; **no persistence — history is empty every reload** |
+| P5 | Coach: auto-run on game end, grade cache, overlays | **done** — post-game panel, worker-graded |
 | P6 | Metric modes + comparison | not started |
-| P7 | Pattern library, frequency instrumentation, drills | not started |
-| P8 | Learning mode: blocking, hints, undo | not started |
+| P7 | Pattern library, frequency instrumentation, drills | library screen + instrumentation done; **drill ladder (§10.3) not built** |
+| P8 | Learning mode: blocking, hints, undo | **done** — live overlay, move-blocking, undo |
 | P9 | Android via Capacitor | pipeline done; export/import must precede shipping (§15) |
 | P10 | Cloud sync | not started |
 
@@ -201,6 +201,24 @@ rather than sniffed once per device — a tablet with a trackpad has both.
 The four touch schemes (`standard`, `flag-first`, `no-flag`, `drag-flag`), the
 long-press threshold, and left-click chording are all in the settings sheet.
 
+## Learning mode and the pattern library
+
+**Learn** and **Patterns** are real sections now, not just Play with a gear icon.
+
+- **Learn** (§7.3, §P8) runs a `LearningGame` — the same `Game` timed play uses, with
+  `open`/`flag`/`chord` gated on `provableIn`, the coach's own "what was knowable"
+  definition. A move that is strictly worse than the best available one is rejected
+  with a shake and a message naming why; every tied certainty is accepted, so the
+  arbitrary order HZiNi's greedy takes among independent openings is never punished.
+  The board overlays the witnesses and the subject of whichever deduction is
+  currently simplest, live, plus undo (rebuilds the board from the seed and replays
+  every event but the last — no separate undo stack).
+- **Patterns** is the library, browsable at any time (§10.2): every catalogued
+  pattern, grouped by tier, in the same derived order the curriculum uses, seeded
+  from the real §10.1.2 measurement below rather than a second invented ranking.
+  A pattern id is rendered as coloured digit chips — the id already *is* the
+  effective-count signature, so this reads the proof directly.
+
 ### Known defects
 
 Full list, with the browser-verification pitfalls, is in [`CLAUDE.md`](CLAUDE.md).
@@ -215,4 +233,9 @@ Still outstanding:
   180ms, which §13.1 flags as a guess needing side-by-side testing against The
   Clean One.
 - `abandon()` marks a replay as abandoned but nothing persists it, so starting a
-  new game mid-play still discards the record in practice. Lands with P4.
+  new game mid-play still discards the record in practice, and `weakSpot` has no
+  history to draw a rolling window from — it is written and tested, but every
+  session starts with an empty sample until P4 lands persistence.
+- The drill ladder (§10.3) is not built. Learning mode always shows the hint; a
+  drill would hide it to test recognition speed instead, which is a distinct
+  mode, not a setting on this one.

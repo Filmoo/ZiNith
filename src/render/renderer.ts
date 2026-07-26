@@ -138,8 +138,17 @@ export class BoardRenderer {
     g.drawImage(this.atlas!, this.spriteFor(b, i) * cs, 0, cs, cs, x, y, cs, cs)
   }
 
-  /** Coach overlay layer (§8.3): witness shading and subject arrows. */
-  overlay(b: Board, witnesses: number[], subjects: number[]) {
+  /**
+   * Coach overlay layer (§8.3): witness shading and subject boxes, for the
+   * post-game ribbon and for learning mode's live hint (§P8).
+   *
+   * Colours come from the theme's own number palette rather than fixed hex, so
+   * dark mode is handled for free: witnesses (the numbers being read) shade in
+   * canonical "1" blue, and subjects box in canonical "2" green when the verdict
+   * is safe or the existing alert red when it is a mine — the same red already
+   * used for detonated cells and wrong flags.
+   */
+  overlay(b: Board, witnesses: number[], subjects: number[], verdict: 'safe' | 'mine') {
     const g = this.g
     if (!g) return
     const cs = this.atlasCs
@@ -148,12 +157,12 @@ export class BoardRenderer {
       Math.round(this.vp.oy * this.dpr) + Math.floor(i / b.width) * cs,
     ] as const
     g.save()
-    g.globalAlpha = 0.28
-    g.fillStyle = '#0000FF'
+    g.globalAlpha = 0.26
+    g.fillStyle = this.theme.numbers[1]
     for (const w of witnesses) { const [x, y] = px(w); g.fillRect(x, y, cs, cs) }
-    g.globalAlpha = 0.9
-    g.strokeStyle = '#C4262E'
-    g.lineWidth = Math.max(2, cs * 0.08)
+    g.globalAlpha = 0.95
+    g.strokeStyle = verdict === 'safe' ? this.theme.numbers[2] : this.theme.alert
+    g.lineWidth = Math.max(2, cs * 0.09)
     for (const s of subjects) { const [x, y] = px(s); g.strokeRect(x + cs * 0.12, y + cs * 0.12, cs * 0.76, cs * 0.76) }
     g.restore()
   }

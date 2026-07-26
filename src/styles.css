@@ -21,6 +21,11 @@
   --info: #0000FF;
   --bad: #FF0000;
   --shadow: 0 1px 2px rgb(19 25 34 / 6%), 0 8px 24px -8px rgb(19 25 34 / 14%);
+  /* Canonical Minesweeper number palette, mirroring tokens.ts NUMBER_COLORS —
+     used outside the canvas for pattern chips, so a "1-2" reads the same way
+     everywhere in the app. */
+  --n1: #0000FF; --n2: #007B00; --n3: #FF0000; --n4: #00007B;
+  --n5: #7B0000; --n6: #007B7B; --n7: #000000; --n8: #7B7B7B;
 
   --display: "Archivo Variable", "Archivo", system-ui, sans-serif;
   --body: "Inter Tight Variable", "Inter Tight", system-ui, -apple-system, sans-serif;
@@ -47,6 +52,9 @@
   --info: #5C8BFF;
   --bad: #FF5F5F;
   --shadow: 0 1px 2px rgb(0 0 0 / 40%), 0 12px 32px -8px rgb(0 0 0 / 60%);
+  /* Lifted for dark, mirroring tokens.ts NUMBER_COLORS_DARK. */
+  --n1: #5C8BFF; --n2: #3FBF63; --n3: #FF5F5F; --n4: #7C93FF;
+  --n5: #D97A7A; --n6: #3FC3C3; --n7: #D8DEE6; --n8: #A8B2BF;
 }
 
 * { box-sizing: border-box; }
@@ -151,6 +159,12 @@ body {
   box-shadow: none;
 }
 
+/* Each mode (Play/Learn/Patterns) renders into this; it is the flex ancestor
+   .board-wrap's flex:1 needs to size against, so it must stay a flex column. */
+.screen { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+
+.screen-scroll { flex: 1; min-height: 0; overflow-y: auto; padding: var(--s4); }
+
 /* ── Metrics strip ─────────────────────────────────────────────────────── */
 
 .metrics {
@@ -209,11 +223,45 @@ body {
 }
 .verdict.win .tag { color: var(--accent); }
 .verdict.loss .tag { color: var(--alert); }
+.verdict.blocked .tag { color: var(--bad); }
 
 @keyframes rise {
   from { opacity: 0; transform: translate(-50%, 6px); }
   to { opacity: 1; transform: translate(-50%, 0); }
 }
+
+/* ── Learning mode: hint card + blocked-move shake ────────────────────────
+   §7.3/§P8 — the hint sits above the board rather than reusing .verdict's
+   bottom-anchored pill, since the two can be on screen together the moment a
+   blocked move happens mid-explanation. */
+
+.hint-card {
+  position: absolute;
+  top: var(--s3);
+  left: var(--s3);
+  right: var(--s3);
+  max-width: 460px;
+  margin-inline: auto;
+  padding: var(--s3) var(--s4);
+  border-radius: 12px;
+  background: var(--panel);
+  border: 1px solid var(--rule);
+  box-shadow: var(--shadow);
+  font-size: 13px;
+  animation: fade 140ms ease-out;
+}
+.hint-card.idle { text-align: center; color: var(--ink-dim); }
+
+@keyframes shake {
+  10%, 90% { transform: translateX(-1px); }
+  20%, 80% { transform: translateX(2px); }
+  30%, 50%, 70% { transform: translateX(-4px); }
+  40%, 60% { transform: translateX(4px); }
+}
+/* On .board-wrap, not on the canvas: the canvas element must stay mounted, or
+   remounting it (e.g. via a React `key`) detaches it from the renderer, which
+   holds a reference to the specific DOM node it attached to. */
+.board-wrap.shake { animation: shake 380ms ease-in-out; }
 
 .ribbon {
   display: block;
@@ -417,6 +465,55 @@ input[type="range"] { accent-color: var(--accent); max-width: 46%; }
 .dot.bad { background: var(--bad); }
 .dot.info { background: var(--info); }
 .dot.good { background: var(--good); }
+
+/* Pattern chips: a pattern id already IS the effective-count signature, so
+   rendering each number in its canonical colour reads the proof directly
+   instead of re-describing it in prose. */
+.chips { display: inline-flex; gap: 3px; vertical-align: middle; }
+.chip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 5px;
+  border-radius: 5px;
+  font-family: var(--mono);
+  font-size: 12px;
+  font-weight: 700;
+  background: var(--surface);
+  border: 1px solid var(--rule);
+}
+.chip-word {
+  font-family: var(--body);
+  font-weight: 600;
+  text-transform: capitalize;
+  padding: 2px 8px;
+  height: auto;
+}
+.chip-num.n1 { color: var(--n1); }
+.chip-num.n2 { color: var(--n2); }
+.chip-num.n3 { color: var(--n3); }
+.chip-num.n4 { color: var(--n4); }
+.chip-num.n5 { color: var(--n5); }
+.chip-num.n6 { color: var(--n6); }
+.chip-num.n7 { color: var(--n7); }
+.chip-num.n8 { color: var(--n8); }
+
+/* ── Pattern library ───────────────────────────────────────────────────── */
+
+.library-head { margin-bottom: var(--s5); }
+.library-head h1 { margin: 0 0 var(--s2); font-size: 22px; font-stretch: 112%; }
+.library-head p { margin: 0; font-size: 13px; max-width: 640px; }
+
+.pattern-row {
+  width: 100%;
+  border: none;
+  background: none;
+  border-radius: 0;
+  text-align: left;
+}
+.pattern-row[aria-expanded="true"] { background: var(--surface); }
 
 /* Keyboard/mouse reference table */
 .keys { display: flex; flex-direction: column; }

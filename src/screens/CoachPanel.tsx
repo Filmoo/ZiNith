@@ -2,6 +2,7 @@ import { useMemo } from 'react'
 import type { CachedGrades, CoachClass } from '../../engine/coach/grade.ts'
 import { describePattern } from '../../engine/coach/patterns.ts'
 import type { Phase, Snapshot } from '../game/controller.ts'
+import { PatternChips } from './PatternsScreen.tsx'
 
 /** Class → how it reads to a player. Order matters: worst first in the list. */
 const CLASS_LABEL: Record<CoachClass, string> = {
@@ -82,7 +83,10 @@ export function CoachPanel({
                 <div className="card">
                   <div className="row">
                     <span className="rowtext">
-                      <span className="rowtitle">{describePattern(worst.id).label}</span>
+                      <span className="rowtitle">
+                        <PatternChips id={worst.id} />
+                        <span style={{ marginLeft: 8 }}>{describePattern(worst.id).label}</span>
+                      </span>
                       <br />
                       <span className="rowsub">{describePattern(worst.id).blurb}</span>
                     </span>
@@ -120,7 +124,8 @@ export function CoachPanel({
                           <>
                             <br />
                             <span className="rowsub">
-                              {describePattern(g.patternId).label} was available
+                              <PatternChips id={g.patternId} />
+                              <span style={{ marginLeft: 6 }}>{describePattern(g.patternId).label} was available</span>
                             </span>
                           </>
                         )}
@@ -142,7 +147,10 @@ export function CoachPanel({
                   {patternRows.map((p) => (
                     <div className="row" key={p.id}>
                       <span className="rowtext">
-                        <span className="rowtitle">{describePattern(p.id).label}</span>
+                        <span className="rowtitle">
+                          <PatternChips id={p.id} />
+                          <span style={{ marginLeft: 8 }}>{describePattern(p.id).label}</span>
+                        </span>
                         <br />
                         <span className="rowsub">
                           tier {describePattern(p.id).tier} · {p.opportunities} chance{p.opportunities === 1 ? '' : 's'}

@@ -91,7 +91,16 @@ records per move plus §14.3's required "unnecessary guess" query. Reconcile whe
 surfaces; the names are cheap to change, the machinery is not.
 
 `npm run patterns` is the §10.1.2 instrumentation. Run it before changing teaching order —
-the current catalogue includes `1-3` and `1-4` because they measurably outrank `1-2-1`.
+the current catalogue includes `1-3` and `1-4` because they measurably outrank `1-2-1`. Its
+output is checked into [`engine/coach/measuredFrequency.ts`](engine/coach/measuredFrequency.ts)
+so the Patterns screen orders itself off a real measurement rather than tier+depth alone;
+re-run and update that file whenever the solver or the pattern signature changes.
+
+`LearningGame` (`src/game/learningGame.ts`) subclasses `Game` rather than duplicating its
+methods: `open`/`flag`/`chord`/`undo` are overridden to gate on `provableIn` and delegate to
+`super`. This is safe because `Game`'s fields are TypeScript-private, not real JS `#private` —
+they exist as ordinary properties at runtime, so the base class's own methods still see and
+mutate them correctly when called via `this` on a subclass instance.
 
 Rules that are load-bearing, not stylistic:
 
@@ -122,7 +131,12 @@ base spec from the code and then treat your reconstruction as authoritative.
 | P1 engine — board, RNG, solver tiers 1–4, 3BV/ZiNi/HZiNi | done, test-verified |
 | P2 playable — canvas, input, control schemes | done for mouse and touch; touch gestures still need on-device tuning |
 | P3 presets + no-guess pool | preset table done; **pool not built** |
-| P4–P8, P10 | not started |
+| P4 replay capture, solve ribbon, history screen | ribbon done; **no persistence, so history is empty and weakSpot has no data** |
+| P5 coach: auto-run, grade cache, overlays | done — post-game panel, live overlays and blocking in learning mode |
+| P6 metric modes + comparison | not started |
+| P7 pattern library, frequency instrumentation, drills | library screen and instrumentation done; **drill ladder (§10.3) not built** |
+| P8 learning mode: blocking, hints, undo | done |
+| P10 | not started |
 | P9 release pipeline — tag to APK | done (export/import must precede shipping, §15) |
 
 Verified by measurement on this codebase, not assumed:

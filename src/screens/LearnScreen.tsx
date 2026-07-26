@@ -1,43 +1,52 @@
 import { useEffect, useRef, useState } from 'react'
-import { Game, type GameConfig, type Phase, type Snapshot } from '../game/controller.ts'
+import type { GameConfig, Phase, Snapshot } from '../game/controller.ts'
+import { LearningGame, type BlockReason, type Hint } from '../game/learningGame.ts'
 import { BoardRenderer } from '../render/renderer.ts'
 import { drawRibbon, gradeColor } from '../render/ribbon.ts'
 import { gradeInWorker } from '../game/coachClient.ts'
 import { CoachPanel } from './CoachPanel.tsx'
+import { describePattern } from '../../engine/coach/patterns.ts'
 import type { CachedGrades } from '../../engine/coach/grade.ts'
 import { attachInput } from '../input/pointer.ts'
 import { LIGHT_THEME, DARK_THEME, ATLAS_FONTS, type Theme } from '../render/atlas.ts'
 import { PRESETS } from '../../engine/presets.ts'
-import { tapLoss, setHaptics } from '../platform/haptics.ts'
+import { setHaptics } from '../platform/haptics.ts'
 import type { PresetChoice, Settings } from '../settings.ts'
 
 const PRESET_ORDER: PresetChoice[] = ['beginner', 'intermediate', 'expert']
 const PRESET_SHORT: Record<PresetChoice, string> = { beginner: 'BEG', intermediate: 'INT', expert: 'EXP' }
-
 const secs = (ms: number) => (ms / 1000).toFixed(2)
 
-export function PlayScreen({
+const BLOCK_MESSAGE: Record<BlockReason, string> = {
+  'guess-available': 'A certain move exists — find it first.',
+  'known-mine': 'That cell is a proven mine. Flag it instead.',
+}
+
+/**
+ * §7.3 / §P8. The same board, renderer and input as Play, but three rules
+ * differ, all enforced by `LearningGame` rather than duplicated here: chord
+ * safety is always on, non-optimal moves are rejected instead of applied, and
+ * undo exists. Everything provable is shown, not just tested — that is what
+ * separates this from a drill (§10.3), which is not built yet.
+ */
+export function LearnScreen({
   settings,
   set,
   dark,
-  menuOpen,
 }: {
   settings: Settings
   set: <K extends keyof Settings>(k: K, v: Settings[K]) => void
   dark: boolean
-  menuOpen: boolean
 }) {
   const wrapRef = useRef<HTMLDivElement>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const ribbonRef = useRef<HTMLCanvasElement>(null)
-  const gameRef = useRef<Game | null>(null)
+  const gameRef = useRef<LearningGame | null>(null)
   const rendererRef = useRef<BoardRenderer>(new BoardRenderer())
   const settingsRef = useRef(settings)
-  /** Set by anything that invalidates the whole canvas; cleared by the frame loop. */
   const needsFullRef = useRef(true)
+  const hintRef = useRef<Hint | null>(null)
 
-  // Live figures are written straight to the DOM by the frame loop; putting them
-  // in React state would re-render the tree 60 times a second.
   const timeRef = useRef<HTMLSpanElement>(null)
   const bvsRef = useRef<HTMLSpanElement>(null)
   const ioeRef = useRef<HTMLSpanElement>(null)
@@ -47,13 +56,13 @@ export function PlayScreen({
   const [nonce, setNonce] = useState(0)
   const [phase, setPhase] = useState<Phase>('idle')
   const [result, setResult] = useState<Snapshot | null>(null)
+  const [hint, setHint] = useState<Hint | null>(null)
+  const [blocked, setBlocked] = useState<{ msg: string; n: number } | null>(null)
 
-  // §8.2 — the coach runs automatically on every completed game, in a worker.
   const [grades, setGrades] = useState<CachedGrades | null>(null)
   const [coachPending, setCoachPending] = useState(false)
   const [coachError, setCoachError] = useState<string | null>(null)
   const [coachOpen, setCoachOpen] = useState(false)
-  /** The frame loop needs the grades to recolour the ribbon (§8.3). */
   const gradesRef = useRef<CachedGrades | null>(null)
 
   settingsRef.current = settings
@@ -62,8 +71,6 @@ export function PlayScreen({
   useEffect(() => { setHaptics(settings.haptics) }, [settings.haptics])
 
   const newGame = () => {
-    // §4.5 — a result is recorded whether won or lost, so abandoning is logged
-    // rather than silently discarded.
     gameRef.current?.abandon()
     setCoachOpen(false)
     setGrades(null)
@@ -72,16 +79,23 @@ export function PlayScreen({
     setNonce((n) => n + 1)
   }
 
-  // A new game whenever the preset, ruleset or nonce changes.
   useEffect(() => {
     const p = PRESETS[settings.preset]
+    // §4.5 / §7.3 — learning mode's rules are fixed, not the play settings':
+    // always no-guess (there must always be a real deduction to show) and
+    // always chord-safe.
     const cfg: GameConfig = {
       preset: settings.preset, width: p.width, height: p.height, mines: p.mines,
-      noGuess: settings.noGuess, scheme: settings.scheme, chordSafety: settings.chordSafety,
+      noGuess: true, scheme: settings.scheme, chordSafety: true,
     }
-    gameRef.current = new Game(cfg)
+    const g = new LearningGame(cfg)
+    g.onHint = (h) => { hintRef.current = h; setHint(h) }
+    g.onBlocked = (_cell, reason) => setBlocked({ msg: BLOCK_MESSAGE[reason], n: Date.now() })
+    gameRef.current = g
+    hintRef.current = null
     setPhase('idle')
     setResult(null)
+    setHint(null)
     const r = rendererRef.current
     const wrap = wrapRef.current, canvas = canvasRef.current
     if (wrap && canvas) {
@@ -90,18 +104,13 @@ export function PlayScreen({
       r.fit(p, wrap.clientWidth, wrap.clientHeight)
       needsFullRef.current = true
     }
-  }, [settings.preset, settings.noGuess, settings.scheme, settings.chordSafety, nonce, theme])
+  }, [settings.preset, settings.scheme, nonce, theme])
 
   useEffect(() => {
     rendererRef.current.setTheme(theme)
     needsFullRef.current = true
   }, [theme])
 
-  /**
-   * The atlas bakes glyphs into a bitmap and caches it, so if it is built before
-   * the webfont arrives the digits stay in the fallback face forever. Load the
-   * exact faces the atlas draws with, then invalidate.
-   */
   useEffect(() => {
     let alive = true
     const fonts = document.fonts
@@ -114,7 +123,29 @@ export function PlayScreen({
     return () => { alive = false }
   }, [])
 
-  // Renderer, input and the frame loop.
+  useEffect(() => {
+    if (!blocked) return
+    const t = setTimeout(() => setBlocked(null), 1400)
+    return () => clearTimeout(t)
+  }, [blocked])
+
+  /**
+   * Restarts the shake by toggling the class imperatively rather than through
+   * React's className/key: keying the wrap or the canvas to force a remount
+   * would detach the canvas from the renderer, which holds a reference to the
+   * specific DOM node it attached to.
+   */
+  useEffect(() => {
+    if (!blocked) return
+    const el = wrapRef.current
+    if (!el) return
+    el.classList.remove('shake')
+    void el.offsetWidth // force a reflow so re-adding the class retriggers the animation
+    el.classList.add('shake')
+    const t = setTimeout(() => el.classList.remove('shake'), 400)
+    return () => clearTimeout(t)
+  }, [blocked])
+
   useEffect(() => {
     const canvas = canvasRef.current, wrap = wrapRef.current
     if (!canvas || !wrap) return
@@ -136,7 +167,7 @@ export function PlayScreen({
       scheme: settingsRef.current.scheme,
       longPressMs: settingsRef.current.longPressMs,
       mouseLeftChord: settingsRef.current.mouseLeftChord,
-      onChange: () => { /* the frame loop picks it up */ },
+      onChange: () => {},
     }))
 
     let raf = 0
@@ -147,6 +178,14 @@ export function PlayScreen({
         if (g.board) {
           if (needsFullRef.current) { r.drawAll(g.board); needsFullRef.current = false; g.dirty.clear() }
           else if (g.dirty.size) { r.drawDirty(g.board, g.dirty); g.dirty.clear() }
+          // Drawn every frame, not just on dirty cells, so a hint that changes
+          // without the board changing (there is no such case today, but the
+          // overlay must also survive whatever cells the dirty pass just blitted
+          // over) is never one frame stale.
+          const h = hintRef.current
+          if (h?.best && g.phase === 'playing') {
+            r.overlay(g.board, h.best.deduction.witnesses, h.best.deduction.subject, h.best.deduction.verdict)
+          }
         } else if (needsFullRef.current) {
           r.drawIdle(g.cfg); needsFullRef.current = false
         }
@@ -178,7 +217,6 @@ export function PlayScreen({
               )
             }
           }
-          if (g.phase === 'lost') tapLoss()
         }
       }
       raf = requestAnimationFrame(frame)
@@ -188,20 +226,8 @@ export function PlayScreen({
     return () => { cancelAnimationFrame(raf); ro.disconnect(); detach() }
   }, [theme])
 
-  // N restarts. Skipped while a sheet is open so it cannot fire behind it.
-  useEffect(() => {
-    if (menuOpen || coachOpen) return
-    const onKey = (e: KeyboardEvent) => {
-      if (e.metaKey || e.ctrlKey || e.altKey) return
-      const t = e.target as HTMLElement | null
-      if (t && /^(INPUT|SELECT|TEXTAREA)$/.test(t.tagName)) return
-      if (e.key === 'n' || e.key === 'N' || e.key === 'F2') { e.preventDefault(); newGame() }
-    }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
-  }, [menuOpen, coachOpen])
-
   const p = PRESETS[settings.preset]
+  const canUndo = phase === 'playing' && (gameRef.current?.replay?.events.length ?? 0) > 1
 
   return (
     <>
@@ -218,6 +244,7 @@ export function PlayScreen({
             </button>
           ))}
         </div>
+        <span className="dim mono" style={{ marginLeft: 'auto', fontSize: 12 }}>always no-guess · chord-safe</span>
       </div>
 
       <section className="metrics" aria-label="Game metrics">
@@ -225,26 +252,45 @@ export function PlayScreen({
           <span className="label">Time</span>
           <span className="value display" ref={timeRef}>0.00</span>
         </div>
-        <div className="metric">
-          <span className="label">3BV/s</span>
-          <span className="value mono" ref={bvsRef}>—</span>
-        </div>
-        <div className="metric">
-          <span className="label">IOE</span>
-          <span className="value mono" ref={ioeRef}>—</span>
-        </div>
-        <div className="metric">
-          <span className="label">Mines</span>
-          <span className="value mono" ref={minesRef}>{p.mines}</span>
-        </div>
-        <div className="metric">
-          <span className="label">3BV</span>
-          <span className="value mono" ref={bvRef}>—</span>
-        </div>
+        <div className="metric"><span className="label">3BV/s</span><span className="value mono" ref={bvsRef}>—</span></div>
+        <div className="metric"><span className="label">IOE</span><span className="value mono" ref={ioeRef}>—</span></div>
+        <div className="metric"><span className="label">Mines</span><span className="value mono" ref={minesRef}>{p.mines}</span></div>
+        <div className="metric"><span className="label">3BV</span><span className="value mono" ref={bvRef}>—</span></div>
       </section>
 
       <main className="board-wrap" ref={wrapRef}>
         <canvas ref={canvasRef} className="board" />
+
+        {phase === 'idle' && (
+          <div className="hint-card idle" role="status">
+            <span className="rowtitle">Open a cell to begin.</span>
+          </div>
+        )}
+
+        {phase === 'playing' && hint && (
+          <div className="hint-card" role="status">
+            {hint.best ? (
+              <>
+                <span className="rowtitle">
+                  <span className={`dot ${hint.best.deduction.verdict === 'mine' ? 'bad' : 'good'}`} />
+                  {describePattern(hint.best.id).label}
+                  <span className="dim mono"> tier {describePattern(hint.best.id).tier} · depth {hint.best.depth}</span>
+                </span>
+                <span className="rowsub">{describePattern(hint.best.id).blurb}</span>
+              </>
+            ) : (
+              <span className="rowtitle dim">No certain move here — this one is a genuine guess.</span>
+            )}
+          </div>
+        )}
+
+        {blocked && (
+          <div className="verdict blocked" role="alert">
+            <span className="tag">Blocked</span>
+            <span>{blocked.msg}</span>
+          </div>
+        )}
+
         {(phase === 'won' || phase === 'lost') && result && !coachOpen && (
           <button
             className={`verdict ${phase === 'won' ? 'win' : 'loss'}`}
@@ -253,9 +299,6 @@ export function PlayScreen({
           >
             <span className="tag">{phase === 'won' ? 'Cleared' : 'Boom'}</span>
             <span className="mono">{secs(result.elapsedMs)}s</span>
-            {phase === 'won'
-              ? <span className="mono dim">{result.bvs.toFixed(2)} 3BV/s</span>
-              : <span className="mono dim">{result.threeBVDone}/{result.threeBV} 3BV</span>}
             <span className="dim">Analysis →</span>
           </button>
         )}
@@ -265,11 +308,8 @@ export function PlayScreen({
 
       <footer className="foot">
         <button className="primary" onClick={newGame}>New game</button>
-        <span className="hint mono dim">
-          {phase === 'idle'
-            ? `${p.width}×${p.height} · ${p.mines} mines${settings.noGuess ? ' · no-guess' : ''}`
-            : `${PRESETS[settings.preset].label}${settings.noGuess ? ' · no-guess' : ' · guess'}`}
-        </span>
+        <button disabled={!canUndo} onClick={() => gameRef.current?.undo()}>Undo</button>
+        <span className="hint mono dim">{PRESETS[settings.preset].label}</span>
       </footer>
 
       {coachOpen && (
