@@ -15,6 +15,11 @@
   --ink-dim: #65717F;
   --alert: #C4262E;
   --accent: #1D4ED8;
+  /* Data-vis triple, and it earns its colour the §11 way: these are canonical
+     "2" green, "1" blue and "3" red. §14.1 already uses them for the trend line. */
+  --good: #007B00;
+  --info: #0000FF;
+  --bad: #FF0000;
   --shadow: 0 1px 2px rgb(19 25 34 / 6%), 0 8px 24px -8px rgb(19 25 34 / 14%);
 
   --display: "Archivo Variable", "Archivo", system-ui, sans-serif;
@@ -37,6 +42,10 @@
   --ink-dim: #8A95A4;
   --alert: #FF5A61;
   --accent: #5C8BFF;
+  /* Dark lifts lightness but must not re-hue: same three numbers. */
+  --good: #3FBF63;
+  --info: #5C8BFF;
+  --bad: #FF5F5F;
   --shadow: 0 1px 2px rgb(0 0 0 / 40%), 0 12px 32px -8px rgb(0 0 0 / 60%);
 }
 
@@ -372,6 +381,42 @@ input[type="range"] { accent-color: var(--accent); max-width: 46%; }
 .row .rowtext { min-width: 0; }
 .row .rowtitle { font-size: 14px; }
 .row .rowsub { font-size: 12px; color: var(--ink-dim); }
+
+/* ── Coach panel ───────────────────────────────────────────────────────── */
+
+.sheet.coach .sheet-head h2 { display: flex; align-items: baseline; gap: var(--s2); }
+.sheet.coach .tag {
+  font-family: var(--display);
+  font-stretch: 112%;
+  font-size: 15px;
+  letter-spacing: 0.02em;
+}
+.sheet.coach .tag.win { color: var(--good); }
+.sheet.coach .tag.loss { color: var(--bad); }
+
+.statrow {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(72px, 1fr));
+  gap: var(--s3);
+  margin-bottom: var(--s5);
+}
+.stat { display: flex; flex-direction: column; gap: 2px; }
+.stat .value { font-size: 24px; font-weight: 700; }
+.stat .value.good { color: var(--good); }
+.stat .value.bad { color: var(--bad); }
+
+.dot {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  margin-right: 7px;
+  vertical-align: middle;
+  background: var(--ink-dim);
+}
+.dot.bad { background: var(--bad); }
+.dot.info { background: var(--info); }
+.dot.good { background: var(--good); }
 
 /* Keyboard/mouse reference table */
 .keys { display: flex; flex-direction: column; }

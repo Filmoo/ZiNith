@@ -198,8 +198,18 @@ export function gradeReplay(r: Replay): CachedGrades {
 
   const graded = grades.length
   const good = grades.filter((g) => g.class === 'optimal' || g.class === 'necessary-guess').length
-  const best = hzini(createBoard(spec), spec.firstClick).value
-  const clicksLost = Math.max(0, r.events.length - best)
+
+  /*
+   * Only a finished board can be compared against HZiNi's full line. On a loss
+   * the player stopped early, so `clicks - hzini` is negative and clamps to a
+   * flattering 0 — it would report a botched game as having wasted nothing.
+   * For those, count the clicks that provably achieved nothing instead. This
+   * also skips an expensive greedy solve on every lost game.
+   */
+  const clicksLost =
+    r.result === 'win'
+      ? Math.max(0, r.events.length - hzini(createBoard(spec), spec.firstClick).value)
+      : grades.reduce((a, g) => a + g.costClicks, 0)
 
   return {
     replayId: r.id,

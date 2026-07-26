@@ -1,5 +1,22 @@
+import type { CachedGrades } from '../../engine/coach/grade.ts'
 import type { Tick } from '../game/controller.ts'
 import type { Theme } from './atlas.ts'
+
+/**
+ * §8.3 — after the game the coach recolours the ribbon. Colours come from the
+ * canonical number palette so the theme's dark variant is handled for free.
+ */
+export function gradeColor(grades: CachedGrades, i: number, theme: Theme): string {
+  const g = grades.grades[i]
+  if (!g) return theme.rule
+  switch (g.class) {
+    case 'optimal': return theme.numbers[2]           // green
+    case 'suboptimal': return theme.numbers[1]        // blue
+    case 'unnecessary-guess':
+    case 'error': return theme.numbers[3]             // red
+    case 'necessary-guess': return theme.inkDim
+  }
+}
 
 /**
  * The solve ribbon (§8.3): one tick per move, width proportional to time taken.

@@ -128,6 +128,15 @@ export function getPattern(id: PatternId): Pattern | undefined {
   return BY_ID.get(id)
 }
 
+/**
+ * Always returns something displayable. Ids are derived, so a shape with no
+ * catalogue entry is normal rather than an error — callers that render a tier or
+ * a label must use this, not `getPattern`, or unnamed shapes show up blank.
+ */
+export function describePattern(id: PatternId): Pattern {
+  return BY_ID.get(id) ?? synthesise(id, id.split('-').length)
+}
+
 /** The number a player reads off a revealed cell: its value minus flags placed. */
 export function effectiveCount(view: SolverView, cell: CellId): number {
   const ni = neighborIndex(view.width, view.height)
@@ -184,11 +193,20 @@ export function patternOf(view: SolverView, d: Deduction): PatternMatch {
 /**
  * Effective counts of the witnesses in board order, canonicalised against their
  * own reverse so a mirrored 2-1 is still reported as 1-2.
+ *
+ * Witnesses whose effective count is 0 are left out. A number with all its mines
+ * already flagged is the `satisfied` insight, and nobody teaches a shape called
+ * "0-2-3-1" — leaving them in also splinters the weak-spot tallies across noise
+ * buckets that no lesson could ever address. Depth still reports the true
+ * minimal witness count, so difficulty is unaffected.
  */
 function signature(view: SolverView, witnesses: CellId[]): PatternId {
   const counts = [...witnesses]
     .sort((a, b) => a - b)
     .map((w) => effectiveCount(view, w))
+    .filter((n) => n > 0)
+  if (counts.length === 0) return 'satisfied'
+  if (counts.length === 1) return 'forced'
   const fwd = counts.join('-')
   const rev = [...counts].reverse().join('-')
   return fwd <= rev ? fwd : rev

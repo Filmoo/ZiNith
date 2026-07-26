@@ -69,6 +69,12 @@ layer's job (§5.4). Three things follow, and they are the load-bearing ideas he
   its own reverse so a mirrored `2-1` aggregates as `1-2`. Nothing is hand-matched, so a shape
   nobody has named still gets a stable id and still appears in the frequency counts. Adding a
   `PATTERNS` entry only attaches a label, tier and prerequisites to an id that already exists.
+  Zero-count witnesses are excluded from the signature: a fully-flagged number is the
+  `satisfied` insight, `0-2-3-1` is not a name anyone teaches, and keeping them splinters the
+  weak-spot tallies into buckets no lesson can address. Depth still counts every witness.
+- **Render patterns with `describePattern`, not `getPattern`.** Ids are derived, so an id with
+  no catalogue entry is normal; `getPattern` returns undefined for those and the UI renders
+  blanks. `describePattern` always yields a displayable label, tier and blurb.
 - **Proof depth is measured.** `minimizeWitnesses` shrinks a proof to what actually proves it,
   and its size *is* §10.1.3's depth. Do not hand-assign difficulty.
 - **Grading must not use `solve()`.** Use `provableIn()`. `solve` short-circuits at the

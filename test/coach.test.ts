@@ -5,7 +5,7 @@ import { solve } from '../engine/solver/index.ts'
 import { generateNoGuess } from '../engine/generate.ts'
 import { newReplay, type Replay } from '../engine/replay.ts'
 import { gradeReplay, provableIn } from '../engine/coach/grade.ts'
-import { PATTERNS, patternOf, teachingOrder, type Pattern } from '../engine/coach/patterns.ts'
+import { PATTERNS, describePattern, patternOf, teachingOrder, type Pattern } from '../engine/coach/patterns.ts'
 import { measureFrequency, weakSpot, recommend } from '../engine/coach/curriculum.ts'
 
 const spec = (over: Partial<BoardSpec> = {}): BoardSpec => ({
@@ -61,6 +61,39 @@ test('pattern naming: a two-number signature is canonical under mirroring', () =
     const reversed = [...parts].reverse().join('-')
     assert.ok(id <= reversed, `${id} is not the canonical orientation`)
   }
+})
+
+test('pattern ids never contain a zero-count witness', () => {
+  // "0-2-3-1" is not a teachable name, and it would splinter the weak-spot
+  // tallies into buckets no lesson can address.
+  const specs = [0, 1, 2, 3].map((i) => generateNoGuess(spec({ seed: `zero-${i}`, firstClick: 100 + i }), { maxAttempts: 2000 }))
+  let checked = 0
+  for (const g of specs) {
+    if (!g) continue
+    const b = createBoard(g.spec)
+    open(b, g.spec.firstClick)
+    for (let step = 0; step < 60; step++) {
+      const view = solverView(b)
+      const r = solve(view)
+      if (r.deductions.length === 0) break
+      for (const d of r.deductions) {
+        const id = patternOf(view, d).id
+        assert.ok(!/(^|-)0(-|$)/.test(id), `pattern id ${id} contains a zero count`)
+        checked++
+      }
+      let progressed = false
+      for (const d of r.deductions) {
+        for (const c of d.subject) {
+          if (b.state[c] !== 0) continue
+          if (d.verdict === 'safe') open(b, c)
+          else { b.state[c] = 2; b.flagCount++ }
+          progressed = true
+        }
+      }
+      if (!progressed || b.exploded) break
+    }
+  }
+  assert.ok(checked > 50, `expected a real sample, checked ${checked}`)
 })
 
 test('every catalogued pattern has resolvable prerequisites', () => {
@@ -193,6 +226,42 @@ test('grading: unflagging costs a click and reveals nothing', () => {
   ]))
   assert.equal(graded.grades[2].class, 'suboptimal')
   assert.equal(graded.grades[2].costClicks, 1)
+})
+
+test('describePattern always yields something displayable for a derived id', () => {
+  // Ids come from witness signatures, so uncatalogued shapes are normal. The UI
+  // renders tier and label unconditionally, so neither may be missing.
+  for (const id of ['0-1', '2-1-3', '1-1-4-2', 'satisfied']) {
+    const p = describePattern(id)
+    assert.equal(p.id, id)
+    assert.ok(p.label.length > 0, `${id} has no label`)
+    assert.ok(p.blurb.length > 0, `${id} has no blurb`)
+    assert.ok([1, 2, 3, 4].includes(p.tier), `${id} has nonsense tier ${p.tier}`)
+  }
+  assert.equal(describePattern('1-2-1').tier, 3, 'a catalogued id must keep its real entry')
+})
+
+test('clicksLost: a lost game counts wasted clicks, not a full-solve comparison', () => {
+  const g = generateNoGuess(spec({ seed: 'lost' }), { maxAttempts: 2000 })
+  assert.ok(g)
+  const b = createBoard(g.spec)
+  open(b, g.spec.firstClick)
+  // Waste two clicks by flagging and unflagging, then stop. Comparing total
+  // clicks against a whole-board solve would clamp to a flattering zero.
+  let hidden = -1
+  for (let i = 0; i < b.state.length; i++) if (b.state[i] === 0) { hidden = i; break }
+  const r = replayOf(g.spec, [
+    { t: 0, type: 'open', cell: g.spec.firstClick },
+    { t: 100, type: 'flag', cell: hidden },
+    { t: 200, type: 'unflag', cell: hidden },
+  ])
+  r.result = 'loss'
+  const graded = gradeReplay(r)
+  assert.ok(graded.summary.clicksLost > 0, 'wasted clicks must be reported on a loss')
+  assert.equal(
+    graded.summary.clicksLost,
+    graded.grades.reduce((a, x) => a + x.costClicks, 0),
+  )
 })
 
 test('weak spot: suppressed below the opportunity floor, surfaced above it', () => {

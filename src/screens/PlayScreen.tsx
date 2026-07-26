@@ -1,7 +1,10 @@
 import { useEffect, useRef, useState } from 'react'
 import { Game, type GameConfig, type Phase, type Snapshot } from '../game/controller.ts'
 import { BoardRenderer } from '../render/renderer.ts'
-import { drawRibbon } from '../render/ribbon.ts'
+import { drawRibbon, gradeColor } from '../render/ribbon.ts'
+import { gradeInWorker } from '../game/coachClient.ts'
+import { CoachPanel } from './CoachPanel.tsx'
+import type { CachedGrades } from '../../engine/coach/grade.ts'
 import { attachInput } from '../input/pointer.ts'
 import { LIGHT_THEME, DARK_THEME, ATLAS_FONTS, type Theme } from '../render/atlas.ts'
 import { PRESETS } from '../../engine/presets.ts'
@@ -47,6 +50,14 @@ export function PlayScreen({
   const [phase, setPhase] = useState<Phase>('idle')
   const [result, setResult] = useState<Snapshot | null>(null)
 
+  // §8.2 — the coach runs automatically on every completed game, in a worker.
+  const [grades, setGrades] = useState<CachedGrades | null>(null)
+  const [coachPending, setCoachPending] = useState(false)
+  const [coachError, setCoachError] = useState<string | null>(null)
+  const [coachOpen, setCoachOpen] = useState(false)
+  /** The frame loop needs the grades to recolour the ribbon (§8.3). */
+  const gradesRef = useRef<CachedGrades | null>(null)
+
   settingsRef.current = settings
   const theme: Theme = dark ? DARK_THEME : LIGHT_THEME
 
@@ -56,6 +67,10 @@ export function PlayScreen({
     // §4.5 — a result is recorded whether won or lost, so abandoning is logged
     // rather than silently discarded.
     gameRef.current?.abandon()
+    setCoachOpen(false)
+    setGrades(null)
+    gradesRef.current = null
+    setCoachError(null)
     setNonce((n) => n + 1)
   }
 
@@ -144,12 +159,27 @@ export function PlayScreen({
         if (bvRef.current) bvRef.current.textContent = s.threeBV > 0 ? `${s.threeBVDone}/${s.threeBV}` : '—'
         if (bvsRef.current) bvsRef.current.textContent = s.elapsedMs > 0 ? s.bvs.toFixed(2) : '—'
         if (ioeRef.current) ioeRef.current.textContent = s.clicks > 0 ? `${Math.round(s.efficiency * 100)}%` : '—'
-        if (ribbonRef.current) drawRibbon(ribbonRef.current, g.ticks, theme)
+        if (ribbonRef.current) {
+          const cg = gradesRef.current
+          drawRibbon(ribbonRef.current, g.ticks, theme, cg ? (i) => gradeColor(cg, i, theme) : undefined)
+        }
 
         if (g.phase !== lastPhase) {
           lastPhase = g.phase
           setPhase(g.phase)
-          if (g.phase === 'won' || g.phase === 'lost') setResult(g.snapshot())
+          if (g.phase === 'won' || g.phase === 'lost') {
+            setResult(g.snapshot())
+            const replay = g.replay
+            if (replay) {
+              setCoachPending(true)
+              setCoachError(null)
+              setCoachOpen(true)
+              gradeInWorker(replay).then(
+                (cg) => { setGrades(cg); gradesRef.current = cg; setCoachPending(false) },
+                (err: Error) => { setCoachError(err.message); setCoachPending(false) },
+              )
+            }
+          }
           if (g.phase === 'lost') tapLoss()
         }
       }
@@ -160,9 +190,9 @@ export function PlayScreen({
     return () => { cancelAnimationFrame(raf); ro.disconnect(); detach() }
   }, [theme])
 
-  // N restarts. Skipped while the sheet is open so it cannot fire behind it.
+  // N restarts. Skipped while a sheet is open so it cannot fire behind it.
   useEffect(() => {
-    if (menuOpen) return
+    if (menuOpen || coachOpen) return
     const onKey = (e: KeyboardEvent) => {
       if (e.metaKey || e.ctrlKey || e.altKey) return
       const t = e.target as HTMLElement | null
@@ -171,7 +201,7 @@ export function PlayScreen({
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [menuOpen])
+  }, [menuOpen, coachOpen])
 
   const p = PRESETS[settings.preset]
 
@@ -219,19 +249,19 @@ export function PlayScreen({
 
       <main className="board-wrap" ref={wrapRef}>
         <canvas ref={canvasRef} className="board" />
-        {phase === 'won' && result && (
-          <div className="verdict win" role="status">
-            <span className="tag">Cleared</span>
+        {(phase === 'won' || phase === 'lost') && result && !coachOpen && (
+          <button
+            className={`verdict ${phase === 'won' ? 'win' : 'loss'}`}
+            onClick={() => setCoachOpen(true)}
+            title="Show analysis"
+          >
+            <span className="tag">{phase === 'won' ? 'Cleared' : 'Boom'}</span>
             <span className="mono">{secs(result.elapsedMs)}s</span>
-            <span className="mono dim">{result.bvs.toFixed(2)} 3BV/s</span>
-            <span className="mono dim">{Math.round(result.efficiency * 100)}% IOE</span>
-          </div>
-        )}
-        {phase === 'lost' && result && (
-          <div className="verdict loss" role="status">
-            <span className="tag">Boom</span>
-            <span className="mono dim">{result.threeBVDone}/{result.threeBV} 3BV in {secs(result.elapsedMs)}s</span>
-          </div>
+            {phase === 'won'
+              ? <span className="mono dim">{result.bvs.toFixed(2)} 3BV/s</span>
+              : <span className="mono dim">{result.threeBVDone}/{result.threeBV} 3BV</span>}
+            <span className="dim">Analysis →</span>
+          </button>
         )}
       </main>
 
@@ -245,6 +275,18 @@ export function PlayScreen({
             : `${PRESETS[settings.preset].label}${settings.noGuess ? ' · no-guess' : ' · guess'}`}
         </span>
       </footer>
+
+      {coachOpen && (
+        <CoachPanel
+          grades={grades}
+          snapshot={result}
+          phase={phase}
+          pending={coachPending}
+          error={coachError}
+          onClose={() => setCoachOpen(false)}
+          onNewGame={newGame}
+        />
+      )}
     </div>
   )
 }
