@@ -32,6 +32,7 @@ Keep it that way: do not import a third-party module from `/engine` or `/test`.
 
 ```
 engine/       pure TS. No dependencies, no React, no DOM. Runs in Node, browser, worker.
+engine/coach/ the pedagogy layer: names patterns, grades replays, derives curriculum.
 src/game/     controller.ts — owns board + replay log. Framework-free on purpose.
 src/render/   renderer.ts (canvas) + atlas.ts (pre-rendered sprites) + ribbon.ts.
 src/input/    pointer.ts — mouse and touch, routed per event by pointerType.
@@ -56,6 +57,35 @@ cannot consume the cell before the right press arrives.
 
 Live HUD figures are written straight to the DOM by the frame loop via refs. Do not move them
 into React state: that re-renders the tree 60 times a second.
+
+## The coach and pedagogy layer (`engine/coach/`)
+
+The solver deliberately does not know pattern names — [`rules.ts`](engine/solver/rules.ts)
+says so: tier 2's subset rule subsumes 1-1, 1-2, 1-2-1 and 1-2-2-1, and naming shapes is this
+layer's job (§5.4). Three things follow, and they are the load-bearing ideas here:
+
+- **Pattern ids are derived, not matched.** A pattern is the *effective counts* (number minus
+  flags placed) of the minimal witness set that proves the deduction, canonicalised against
+  its own reverse so a mirrored `2-1` aggregates as `1-2`. Nothing is hand-matched, so a shape
+  nobody has named still gets a stable id and still appears in the frequency counts. Adding a
+  `PATTERNS` entry only attaches a label, tier and prerequisites to an id that already exists.
+- **Proof depth is measured.** `minimizeWitnesses` shrinks a proof to what actually proves it,
+  and its size *is* §10.1.3's depth. Do not hand-assign difficulty.
+- **Grading must not use `solve()`.** Use `provableIn()`. `solve` short-circuits at the
+  cheapest productive tier, which is correct for playing and wrong for grading twice over:
+  it hides a 1-1 behind a satisfied number, and provability by these rules is not monotone, so
+  revealing a cell can dismantle the subset relation that proved something. Both make the
+  coach accuse players who were right. `provableIn` unions every tier including the tank; it
+  costs one enumeration per move, which is affordable only because the coach runs once per
+  game in a worker (§8.2). **Timed play must never call it.**
+
+`CoachClass` is **inferred**, not spec'd — §8.2 says the classification table is "unchanged",
+meaning it lives in the base spec, which is missing. It is reconstructed from the fields §8.4
+records per move plus §14.3's required "unnecessary guess" query. Reconcile when the base spec
+surfaces; the names are cheap to change, the machinery is not.
+
+`npm run patterns` is the §10.1.2 instrumentation. Run it before changing teaching order —
+the current catalogue includes `1-3` and `1-4` because they measurably outrank `1-2-1`.
 
 Rules that are load-bearing, not stylistic:
 

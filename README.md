@@ -118,6 +118,34 @@ Recorded on this codebase rather than assumed:
 - **No-guess generation, expert (30×16, 99 mines), n=400**: p50 8ms, p90 26ms,
   p99 53ms, max 115ms, worst case 49 attempts.
 
+### Pattern frequency (§10.1.2)
+
+`npm run patterns` solves generated expert boards and counts which patterns
+actually carry the solve, so teaching order is derived rather than asserted.
+Over 250 boards / ~73,000 firings:
+
+| Pattern | Tier | Depth | Share |
+|---|---|---|---|
+| satisfied | 1 | 1 | 54.97% |
+| forced | 1 | 1 | 40.40% |
+| 1-1 | 2 | 2 | 2.86% |
+| 1-2 | 2 | 2 | 1.02% |
+| tank | 4 | 5 | 0.31% |
+| global-count | 4 | 1 | 0.16% |
+| 2-2 | 2 | 2 | 0.04% |
+| 1-2-1 | 3 | 3 | 0.04% |
+| 1-2-2-1 | 3 | 4 | 0.01% |
+
+Two things this measurement settled, both against folklore:
+
+1. **Tier 1 is 95% of the game.** Everything famous is a rounding error by
+   comparison, which argues for drilling recognition speed on satisfied/forced
+   rather than treating them as a beginner formality.
+2. **`1-2-1` is rarer than the tank** — and `1-3` and `1-4` both fire more often
+   than `1-2-2-1` while being *shallower* proofs. They were added to the
+   catalogue on that evidence. Proof depth matches §10.1.3's own examples
+   exactly: 1-1 is 2, 1-2-1 is 3.
+
 Note that the tail of that distribution, not the median, is what §4.4 cares
 about.
 
