@@ -28,11 +28,19 @@ export interface Pattern {
 }
 
 /**
- * The named catalogue. Anything not in here is still a valid pattern with a
- * derived id; `patternOf` synthesises an entry so unknown shapes are counted
- * rather than dropped.
+ * Solver primitives — reading one number on its own.
+ *
+ * These are deliberately **not** in the curriculum. A pattern needs at least two
+ * interacting constraints; one number in isolation has no depth to teach, and
+ * anyone playing this app cleared that bar long before they installed it. They
+ * keep ids, labels and blurbs because the coach still has to *name* a
+ * single-witness proof when it explains a move — naming is not teaching.
+ *
+ * They are also why raw firing counts mislead: these two account for ~95% of all
+ * deductions on an expert board, so any ordering driven by that number just
+ * reports the floor. See `shapes.ts`.
  */
-export const PATTERNS: readonly Pattern[] = [
+export const PRIMITIVES: readonly Pattern[] = [
   {
     id: 'satisfied',
     label: 'Satisfied number',
@@ -47,11 +55,26 @@ export const PATTERNS: readonly Pattern[] = [
     requires: [],
     blurb: 'A number with exactly as many hidden neighbours as mines left. All of them are mines.',
   },
+] as const
+
+const PRIMITIVE_IDS = new Set<PatternId>(PRIMITIVES.map((p) => p.id))
+
+/** A single-number read, which is notation rather than a lesson. */
+export function isPrimitive(id: PatternId): boolean {
+  return PRIMITIVE_IDS.has(id)
+}
+
+/**
+ * The taught catalogue: every entry needs two or more interacting numbers.
+ * Anything not in here is still a valid pattern with a derived id; `patternOf`
+ * synthesises an entry so unknown shapes are counted rather than dropped.
+ */
+export const PATTERNS: readonly Pattern[] = [
   {
     id: '1-1',
     label: '1-1',
     tier: 2,
-    requires: ['satisfied', 'forced'],
+    requires: [],
     blurb: 'Two adjacent 1s where one sees a subset of the other. The cell only the second one sees is safe.',
   },
   {
@@ -99,6 +122,27 @@ export const PATTERNS: readonly Pattern[] = [
     requires: ['1-2'],
     blurb: 'Three numbers in a line. The mines sit under the 1s, and the middle cell is safe.',
   },
+  // Both added on occurrence evidence: each is seen more often than 1-2-1 on
+  // real expert boards (8.7% and 6.8% of shape occurrences against 4.3%), and
+  // 1-1-2 is the single most common three-number run there is. Neither shows up
+  // in irreducible-proof counts at all, which is exactly the bias `shapes.ts`
+  // exists to correct. Unlike 1-2-1 in a corridor, what these force depends on
+  // the surrounding wall, so the blurbs teach the reading rather than a fixed
+  // answer.
+  {
+    id: '1-1-2',
+    label: '1-1-2',
+    tier: 3,
+    requires: ['1-1', '1-2'],
+    blurb: 'The most common three-number run on the board. Take the 1-1 first: what it rules out turns the 2 into a count you can finish in one read.',
+  },
+  {
+    id: '1-2-2',
+    label: '1-2-2',
+    tier: 3,
+    requires: ['1-2'],
+    blurb: 'The 1 pins the near end of the run, and the two 2s then have only one way left to place their mines.',
+  },
   {
     id: '1-2-2-1',
     label: '1-2-2-1',
@@ -117,12 +161,14 @@ export const PATTERNS: readonly Pattern[] = [
     id: 'global-count',
     label: 'Mine counting',
     tier: 4,
-    requires: ['forced'],
+    requires: [],
     blurb: 'Uses the total mines left rather than any single number. Often the whole endgame.',
   },
 ] as const
 
-const BY_ID = new Map(PATTERNS.map((p) => [p.id, p]))
+// Lookups span both, so the coach can still label a single-number proof even
+// though the curriculum never teaches one.
+const BY_ID = new Map([...PRIMITIVES, ...PATTERNS].map((p) => [p.id, p]))
 
 export function getPattern(id: PatternId): Pattern | undefined {
   return BY_ID.get(id)
@@ -216,7 +262,7 @@ function signature(view: SolverView, witnesses: CellId[]): PatternId {
 function synthesise(id: PatternId, witnessCount: number): Pattern {
   const tier: Tier = witnessCount <= 1 ? 1 : witnessCount === 2 ? 2 : witnessCount <= 4 ? 3 : 4
   const requires: PatternId[] =
-    tier === 1 ? [] : tier === 2 ? ['satisfied', 'forced'] : tier === 3 ? ['1-2'] : ['1-2-1']
+    tier <= 2 ? [] : tier === 3 ? ['1-2'] : ['1-2-1']
   return {
     id,
     label: id,
