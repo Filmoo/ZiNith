@@ -1,0 +1,13 @@
+node_modules/
+dist/
+dist-ssr/
+coverage/
+*.local
+.DS_Store
+.vite/
+.idea/
+.vscode/
+
+# Capacitor (P9)
+android/
+ios/
