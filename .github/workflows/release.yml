@@ -1,0 +1,103 @@
+name: Release APK
+
+# Tag it, get an APK: `git tag v0.2.0 && git push origin v0.2.0`
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  apk:
+    name: Build and publish APK
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with: { node-version: '22' }
+
+      - name: Engine tests must pass before anything ships
+        run: npm test
+
+      - run: npm install
+
+      - name: Web build
+        run: npx vite build
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - uses: android-actions/setup-android@v3
+
+      - name: Derive version from the tag
+        id: ver
+        run: |
+          RAW="${GITHUB_REF_NAME#v}"
+          echo "name=${RAW:-0.0.0}" >> "$GITHUB_OUTPUT"
+          echo "code=${GITHUB_RUN_NUMBER}" >> "$GITHUB_OUTPUT"
+
+      - name: Add the Android platform
+        run: |
+          if [ ! -d android ]; then npx cap add android; fi
+          npx cap sync android
+
+      - name: Stamp versionName and versionCode
+        run: |
+          sed -i "s/versionCode .*/versionCode ${{ steps.ver.outputs.code }}/" android/app/build.gradle
+          sed -i "s/versionName .*/versionName \"${{ steps.ver.outputs.name }}\"/" android/app/build.gradle
+
+      - name: Restore signing keystore
+        id: keystore
+        env:
+          KS: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+        run: |
+          if [ -n "$KS" ]; then
+            echo "$KS" | base64 -d > android/app/release.jks
+            echo "signed=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "No ANDROID_KEYSTORE_BASE64 secret; producing a debug APK instead."
+            echo "signed=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Assemble release APK
+        if: steps.keystore.outputs.signed == 'true'
+        working-directory: android
+        env:
+          ZINITH_STORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ZINITH_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ZINITH_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          ./gradlew assembleRelease \
+            -Pandroid.injected.signing.store.file=$PWD/app/release.jks \
+            -Pandroid.injected.signing.store.password="$ZINITH_STORE_PASSWORD" \
+            -Pandroid.injected.signing.key.alias="$ZINITH_KEY_ALIAS" \
+            -Pandroid.injected.signing.key.password="$ZINITH_KEY_PASSWORD"
+
+      - name: Assemble debug APK (unsigned fallback)
+        if: steps.keystore.outputs.signed != 'true'
+        working-directory: android
+        run: ./gradlew assembleDebug
+
+      - name: Collect the APK
+        id: collect
+        run: |
+          APK=$(find android/app/build/outputs/apk -name '*.apk' | head -1)
+          cp "$APK" "zinith-${{ steps.ver.outputs.name }}.apk"
+          echo "path=zinith-${{ steps.ver.outputs.name }}.apk" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: zinith-apk
+          path: ${{ steps.collect.outputs.path }}
+
+      - name: Attach the APK to the release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: ${{ steps.collect.outputs.path }}
+          generate_release_notes: true

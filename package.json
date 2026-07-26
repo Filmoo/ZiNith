@@ -1,0 +1,37 @@
+{
+  "name": "zinith",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "dev:lan": "vite --host",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview",
+    "typecheck": "tsc --noEmit",
+    "test": "node --test --experimental-strip-types test/*.test.ts",
+    "test:watch": "node --test --watch --experimental-strip-types test/*.test.ts",
+    "check": "npm run typecheck && npm test",
+    "bench": "node --experimental-strip-types test/bench.ts",
+    "cap:sync": "cap sync android",
+    "android:build": "cd android && ./gradlew assembleRelease"
+  },
+  "dependencies": {
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "zustand": "^4.5.5",
+    "dexie": "^4.0.8",
+    "comlink": "^4.4.1"
+  },
+  "devDependencies": {
+    "@capacitor/android": "^6.1.2",
+    "@capacitor/cli": "^6.1.2",
+    "@capacitor/core": "^6.1.2",
+    "@capacitor/haptics": "^6.0.1",
+    "@types/react": "^18.3.5",
+    "@types/react-dom": "^18.3.0",
+    "@vitejs/plugin-react": "^4.3.1",
+    "typescript": "^5.6.2",
+    "vite": "^5.4.3"
+  }
+}

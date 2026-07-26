@@ -1,0 +1,28 @@
+name: CI
+
+on:
+  push: { branches: ['**'] }
+  pull_request:
+
+jobs:
+  engine:
+    name: Engine tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: '22' }
+      # The engine has zero dependencies and runs under Node's native TS
+      # stripping, so this job needs no install at all.
+      - run: npm test
+
+  build:
+    name: Typecheck and web build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: '22' }
+      - run: npm install
+      - run: npx tsc --noEmit
+      - run: npx vite build

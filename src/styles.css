@@ -1,0 +1,56 @@
+/* §11 — the board is the only colourful thing on screen. */
+:root {
+  --surface: #EDF0F4; --cell-hidden: #DCE2EA; --cell-open: #F6F8FA;
+  --rule: #C3CCD8; --ink: #1C2430; --ink-dim: #6B7684; --alert: #C4262E;
+  --display: "Archivo Expanded", "Archivo", system-ui, sans-serif;
+  --body: "Inter Tight", system-ui, -apple-system, sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, "SF Mono", monospace;
+}
+[data-theme="dark"] {
+  --surface: #12161C; --cell-hidden: #232A33; --cell-open: #171C23;
+  --rule: #39424E; --ink: #E7ECF2; --ink-dim: #8C97A5; --alert: #FF5A61;
+}
+* { box-sizing: border-box; }
+html, body, #root { height: 100%; margin: 0; }
+body {
+  background: var(--surface); color: var(--ink); font-family: var(--body);
+  overscroll-behavior: none; -webkit-user-select: none; user-select: none;
+  -webkit-touch-callout: none; -webkit-tap-highlight-color: transparent;
+}
+.mono { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+.display { font-family: var(--display); font-variant-numeric: tabular-nums; letter-spacing: -0.02em; }
+.dim { color: var(--ink-dim); }
+
+.play { display: flex; flex-direction: column; height: 100%; padding: env(safe-area-inset-top) 0 env(safe-area-inset-bottom); }
+
+.hud { display: flex; align-items: baseline; gap: 18px; padding: 10px 14px 6px; }
+.hud-metric { display: flex; flex-direction: column; gap: 1px; }
+.hud-label { font-size: 10px; letter-spacing: 0.12em; color: var(--ink-dim); }
+.hud-value { font-size: 22px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.hud .ghost { margin-left: auto; }
+
+.board-wrap { position: relative; flex: 1; min-height: 0; }
+/* §7.2 — no browser gesture may compete with input. */
+.board { display: block; touch-action: none; }
+
+.ribbon { display: block; width: 100%; height: 14px; border-top: 1px solid var(--rule); border-bottom: 1px solid var(--rule); }
+
+.foot { display: flex; align-items: center; gap: 12px; padding: 10px 14px; }
+.foot .mono { font-size: 12px; }
+
+button { font: inherit; min-height: 44px; border-radius: 10px; border: 1px solid var(--rule); background: var(--cell-open); color: var(--ink); padding: 0 16px; }
+button.primary { background: var(--ink); color: var(--surface); border-color: var(--ink); font-weight: 600; }
+button.wide { width: 100%; margin-top: 8px; }
+button.ghost { border: none; background: none; color: var(--ink-dim); font-size: 20px; min-width: 44px; }
+button:focus-visible, select:focus-visible, input:focus-visible { outline: 2px solid var(--alert); outline-offset: 2px; }
+
+.verdict { position: absolute; left: 50%; bottom: 16px; transform: translateX(-50%); background: var(--ink); color: var(--surface); padding: 8px 14px; border-radius: 999px; font-size: 13px; font-family: var(--mono); }
+.verdict.loss { background: var(--alert); }
+
+.sheet { position: fixed; inset: 0; background: rgba(12, 16, 22, 0.45); display: flex; align-items: flex-end; }
+.sheet-inner { width: 100%; background: var(--surface); border-radius: 16px 16px 0 0; padding: 18px 18px calc(18px + env(safe-area-inset-bottom)); }
+.sheet h2 { margin: 0 0 12px; font-size: 16px; }
+.row { display: flex; align-items: center; justify-content: space-between; gap: 16px; min-height: 44px; }
+.row select, .row input[type="range"] { max-width: 55%; }
+
+@media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }
