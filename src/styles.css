@@ -628,3 +628,11 @@ button.icon[aria-pressed="true"] { color: var(--accent); background: var(--surfa
 
 /* The one hint worth raising your voice for: a genuinely forced guess. */
 .hint.warn { color: var(--alert); }
+
+/*
+ * PlayScreen stays mounted behind the other views, so its wrapper has to be a
+ * real full-height box: `.app` is `height: 100%`, and against an auto-height
+ * parent that resolves to nothing and collapses the board to a few pixels.
+ */
+.view { height: 100%; }
+.view[hidden] { display: none; }

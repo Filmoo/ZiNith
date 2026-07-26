@@ -33,7 +33,7 @@ export function App() {
         it owns the canvas, the renderer and the running game, and tearing that
         down to look at history would end the game you are in the middle of.
       */}
-      <div hidden={view.name !== 'play'}>
+      <div className="view" hidden={view.name !== 'play'}>
         <PlayScreen
           settings={settings}
           set={set}
