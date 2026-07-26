@@ -235,22 +235,39 @@ body {
    bottom-anchored pill, since the two can be on screen together the moment a
    blocked move happens mid-explanation. */
 
-/* A strip under the board rather than a panel over it. Floating it above the
+/* Board and coach side by side, never overlapping: a panel floating on the
    canvas hid the very cells the overlay was pointing at. */
-.hint-strip {
+.learn-body { flex: 1; min-height: 0; display: flex; }
+.learn-body .board-wrap { flex: 1; min-width: 0; }
+
+.coach-rail {
   flex: none;
-  min-height: 56px;
+  width: 280px;
   display: flex;
   flex-direction: column;
-  justify-content: center;
-  gap: 3px;
-  padding: var(--s2) var(--s4);
+  gap: var(--s2);
+  padding: var(--s4);
+  overflow-y: auto;
   background: var(--panel);
-  border-top: 1px solid var(--rule);
+  border-left: 1px solid var(--rule);
   font-size: 13px;
 }
-.hint-strip .rowsub { color: var(--ink-dim); }
-.hint-strip .rowtitle { font-weight: 600; }
+.coach-rail p { margin: 0; }
+.coach-rail .rowsub { color: var(--ink-dim); line-height: 1.45; }
+.coach-rail .rowtitle { font-weight: 600; font-size: 14px; display: block; }
+.coach-rail .chips { margin-bottom: var(--s1); }
+
+/* Narrow: the rail becomes a band under the board rather than squeezing it. */
+@media (max-width: 820px) {
+  .learn-body { flex-direction: column; }
+  .coach-rail {
+    width: auto;
+    max-height: 34%;
+    border-left: none;
+    border-top: 1px solid var(--rule);
+    padding: var(--s3) var(--s4);
+  }
+}
 
 @keyframes shake {
   10%, 90% { transform: translateX(-1px); }

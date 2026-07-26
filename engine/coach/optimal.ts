@@ -74,10 +74,10 @@ function applyToSim(b: Board, s: Sim, m: Click): boolean {
  * position. The step below is read off the single plan instead, and anything the
  * player does that falls outside it is costed exactly, once, at that moment.
  */
-export function planFrom(b: Board): OptimalPlan {
+export function planFrom(b: Board, from = -1): OptimalPlan {
   const openingOf = threeBV(b).openingOf
   const s = simFromBoard(b)
-  const r = greedyFrom(b, s, solverOracle(b), openingOf)
+  const r = greedyFrom(b, s, solverOracle(b), openingOf, from)
   const path = r.path
 
   const onPlan = new Set<MoveKey>()
@@ -120,7 +120,8 @@ export function costOf(b: Board, m: Click, openingOf?: Int32Array): number {
   const oo = openingOf ?? threeBV(b).openingOf
   const s = simFromBoard(b)
   if (!applyToSim(b, s, m)) return Infinity
-  return 1 + greedyFrom(b, s, solverOracle(b), oo).value
+  // Continue from the move just played: that is where the cursor now is.
+  return 1 + greedyFrom(b, s, solverOracle(b), oo, m.cell).value
 }
 
 export interface MoveAdvice {
@@ -167,8 +168,8 @@ const MAX_FALLBACK_CANDIDATES = 16
  * a move whose cost *is* the baseline, or the hint would recommend something the
  * blocker then rejects.
  */
-export function analyzePosition(b: Board): PositionAnalysis {
-  const plan = planFrom(b)
+export function analyzePosition(b: Board, from = -1): PositionAnalysis {
+  const plan = planFrom(b, from)
   const av = provableIn(solverView(b))
   const hasCertainty = av.any
 
@@ -205,17 +206,27 @@ export function analyzePosition(b: Board): PositionAnalysis {
   const planOpens = plan.step.filter((m) => m.type === 'open' && av.safe.has(m.cell))
   if (planOpens.length > 0) {
     const view = solverView(b)
+    const away = (c: number) => {
+      if (from < 0) return 0
+      return Math.max(
+        Math.abs((c % b.width) - (from % b.width)),
+        Math.abs(Math.floor(c / b.width) - Math.floor(from / b.width)),
+      )
+    }
     let pick = planOpens[0]
-    let pickRank: [number, number] = [Infinity, Infinity]
+    let pickRank: [number, number, number] = [Infinity, Infinity, Infinity]
     for (const m of planOpens) {
       const d = av.proofOf.get(m.cell)
-      const rank: [number, number] = d
-        ? [patternOf(view, d).pattern.tier, patternOf(view, d).depth]
-        : [Infinity, Infinity]
-      if (rank[0] < pickRank[0] || (rank[0] === pickRank[0] && rank[1] < pickRank[1])) {
-        pick = m
-        pickRank = rank
-      }
+      // Teachability first, then proximity: these are all equal on cost, so the
+      // choice is free, and it is worth spending on the clearest lesson before
+      // the shortest mouse travel.
+      const rank: [number, number, number] = d
+        ? [patternOf(view, d).pattern.tier, patternOf(view, d).depth, away(m.cell)]
+        : [Infinity, Infinity, away(m.cell)]
+      const better = rank[0] < pickRank[0]
+        || (rank[0] === pickRank[0] && rank[1] < pickRank[1])
+        || (rank[0] === pickRank[0] && rank[1] === pickRank[1] && rank[2] < pickRank[2])
+      if (better) { pick = m; pickRank = rank }
     }
     return {
       ...plan, hasCertainty, available: av, bestAchievable: plan.best,

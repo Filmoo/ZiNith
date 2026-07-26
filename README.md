@@ -115,6 +115,11 @@ testable headlessly; React only subscribes to it.
 Recorded on this codebase rather than assumed:
 
 - **Solver soundness**: 10,000 boards, 21,532 stalls audited, zero unsound calls.
+- **Chording, expert**: ZiNi averages 77% of 3BV and HZiNi 85%, with chords at
+  17% / 12% of their respective click paths. Before the greedy interleaved
+  chording with opening, ZiNi sat within 2% of 3BV and chords were 1.6% of the
+  path — an implementation that technically satisfied "never exceeds 3BV" while
+  barely chording at all.
 - **No-guess generation, expert (30×16, 99 mines), n=400**: p50 8ms, p90 26ms,
   p99 53ms, max 115ms, worst case 49 attempts.
 

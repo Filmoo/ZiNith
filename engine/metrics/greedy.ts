@@ -63,7 +63,7 @@ export function plainClickCost(cells: number[], b: Board, openingOf: Int32Array)
 export function greedySolve(b: Board, firstClick: number, oracle: FlagOracle): GreedyResult {
   const s: Sim = newSim(b)
   openSim(b, s, firstClick)
-  const rest = greedyFrom(b, s, oracle)
+  const rest = greedyFrom(b, s, oracle, threeBV(b).openingOf, firstClick)
   return {
     value: rest.value + 1,
     path: [{ type: 'open', cell: firstClick }, ...rest.path],
@@ -103,12 +103,29 @@ export function greedyFrom(
   s: Sim,
   oracle: FlagOracle,
   openingOf: Int32Array = threeBV(b).openingOf,
+  /** Cell the cursor is on, used only to break ties. -1 disables that. */
+  from = -1,
 ): GreedyResult {
   const ni = neighborIndex(b.width, b.height)
   const n = b.width * b.height
   const path: Click[] = []
   let clicks = 0
   let blindOpens = 0
+
+  /*
+   * Where the cursor is. Ties are broken towards it, which matters because the
+   * cost model is otherwise indifferent: two equally cheap continuations are
+   * equally cheap, but a player crossing the board between every click is not
+   * playing the same game as one working outwards from where they are. Chebyshev
+   * distance, since a mouse moves diagonally as cheaply as orthogonally.
+   */
+  let cursor = from
+  const dist = (c: number): number => {
+    if (cursor < 0) return 0
+    const dx = Math.abs((c % b.width) - (cursor % b.width))
+    const dy = Math.abs(Math.floor(c / b.width) - Math.floor(cursor / b.width))
+    return Math.max(dx, dy)
+  }
 
   const minesAround = (cell: number): number[] => {
     const out: number[] = []
@@ -121,11 +138,12 @@ export function greedyFrom(
 
   oracle.refresh(s)
 
-  for (;;) {
+  /** The most profitable chord available right now, or -1. */
+  const bestChord = (): number => {
     let best = -1
     let bestBenefit = 0
     let bestCells = 0
-
+    let bestDist = Infinity
     for (let c = 0; c < n; c++) {
       if (b.mines[c] || b.adj[c] === 0 || !s.opened[c]) continue
       const needed = minesAround(c)
@@ -135,44 +153,75 @@ export function greedyFrom(
       const cost = needed.length + 1
       const benefit = plainClickCost(cells, b, openingOf) - cost
       if (benefit <= 0) continue
-      if (benefit > bestBenefit || (benefit === bestBenefit && cells.length > bestCells)) {
+      const d = dist(c)
+      const better = benefit > bestBenefit
+        || (benefit === bestBenefit && cells.length > bestCells)
+        || (benefit === bestBenefit && cells.length === bestCells && d < bestDist)
+      if (better) {
         best = c
         bestBenefit = benefit
         bestCells = cells.length
+        bestDist = d
       }
     }
+    return best
+  }
 
-    if (best === -1) break
-
-    for (const m of minesAround(best)) {
-      s.flagged[m] = 1
-      path.push({ type: 'flag', cell: m })
+  /*
+   * Chording and opening interleave, and that is the whole point.
+   *
+   * The previous shape ran the chord loop to exhaustion once and then opened
+   * every remaining cell plainly. But each of those opens reveals fresh numbers,
+   * and fresh numbers are exactly what makes new chords possible — so chording
+   * only ever happened off the opening cascade's own frontier. Measured on 25
+   * expert boards it left chords at 1.6% of the ZiNi path and ZiNi within 2% of
+   * 3BV, which is not a chording player at all.
+   *
+   * So: exhaust the chords, take a single plain open, and go round again.
+   * Cascades are preferred for that open because clicking an opening reveals its
+   * whole border for free, and doing it later costs a click per border cell.
+   */
+  for (;;) {
+    for (;;) {
+      const c = bestChord()
+      if (c === -1) break
+      for (const m of minesAround(c)) {
+        s.flagged[m] = 1
+        path.push({ type: 'flag', cell: m })
+        clicks++
+      }
+      for (let k = 0; k < ni.count[c]; k++) {
+        const nb = ni.table[c * 8 + k]
+        if (!b.mines[nb] && !s.opened[nb]) openSim(b, s, nb)
+      }
+      path.push({ type: 'chord', cell: c })
       clicks++
+      cursor = c
+      oracle.refresh(s)
     }
-    for (let k = 0; k < ni.count[best]; k++) {
-      const nb = ni.table[best * 8 + k]
-      if (!b.mines[nb] && !s.opened[nb]) openSim(b, s, nb)
-    }
-    path.push({ type: 'chord', cell: best })
-    clicks++
-    oracle.refresh(s)
-  }
 
-  // Cascades first: clicking an opening reveals its border for free, so doing
-  // this in the wrong order costs a click per border cell.
-  for (let c = 0; c < n; c++) {
-    if (b.mines[c] || s.opened[c] || b.adj[c] !== 0) continue
-    openSim(b, s, c)
-    path.push({ type: 'open', cell: c })
+    // Nearest, not lowest-index: scanning from cell 0 sent the cursor back to
+    // the top-left corner before every single straggler.
+    const nearest = (want: (c: number) => boolean): number => {
+      let pick = -1
+      let bestD = Infinity
+      for (let c = 0; c < n; c++) {
+        if (b.mines[c] || s.opened[c] || !want(c)) continue
+        const d = dist(c)
+        if (d < bestD) { bestD = d; pick = c }
+      }
+      return pick
+    }
+    let next = nearest((c) => b.adj[c] === 0)
+    if (next === -1) next = nearest(() => true)
+    if (next === -1) break
+
+    openSim(b, s, next)
+    path.push({ type: 'open', cell: next })
     clicks++
     blindOpens++
-  }
-  for (let c = 0; c < n; c++) {
-    if (b.mines[c] || s.opened[c]) continue
-    openSim(b, s, c)
-    path.push({ type: 'open', cell: c })
-    clicks++
-    blindOpens++
+    cursor = next
+    oracle.refresh(s)
   }
 
   return { value: clicks, path, blindOpens }

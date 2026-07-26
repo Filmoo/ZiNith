@@ -65,20 +65,32 @@ function HintBody({ hint }: { hint: Hint }) {
   return (
     <>
       {advice && (
-        <span className="rowtitle">
-          <span className={`dot ${advice.type === 'flag' ? 'bad' : 'good'}`} />
-          {ACTION_LABEL[advice.type]}
-          {advice.type === 'chord' && ` — clears ${plural(advice.opens.length, 'cell')} in one click`}
+        <>
+          <span className="rowtitle">
+            <span className={`dot ${advice.type === 'flag' ? 'bad' : 'good'}`} />
+            {ACTION_LABEL[advice.type]}
+            {advice.type === 'chord' && ` — ${plural(advice.opens.length, 'cell')} in one click`}
+          </span>
           {advice.saves > 0 && (
-            <span className="mono" style={{ color: 'var(--good)' }}> saves {plural(advice.saves, 'click')}</span>
+            <span className="mono" style={{ color: 'var(--good)', fontSize: 12 }}>
+              {/* A flag never saves anything by itself — the saving belongs to
+                  the chord it is setting up, and saying otherwise teaches the
+                  opposite of the lesson. */}
+              {advice.type === 'flag'
+                ? `sets up a chord worth ${plural(advice.saves, 'click')}`
+                : `saves ${plural(advice.saves, 'click')} vs opening one by one`}
+            </span>
           )}
-          <span className="dim mono"> · {plural(a.bestAchievable, 'click')} left</span>
-        </span>
+          <span className="dim mono" style={{ fontSize: 12 }}>
+            {plural(a.bestAchievable, 'click')} left to clear
+          </span>
+        </>
       )}
       {pattern && (
-        <span className="rowsub">
+        <div style={{ marginTop: 'var(--s3)' }}>
+          <span className="label" style={{ display: 'block', marginBottom: 4 }}>Why</span>
           <PatternChips id={pattern.id} />
-          <span style={{ marginLeft: 6 }}>
+          <span className="rowsub" style={{ display: 'block', marginTop: 4 }}>
             <b>{describePattern(pattern.id).label}</b>
             <span className="dim">
               {' ('}tier {describePattern(pattern.id).tier}
@@ -87,9 +99,10 @@ function HintBody({ hint }: { hint: Hint }) {
               {isShape(pattern.id) && `, ${plural(pattern.depth, 'number')}`}
               {')'}
             </span>
-            {' — '}{describePattern(pattern.id).blurb}
+            <br />
+            {describePattern(pattern.id).blurb}
           </span>
-        </span>
+        </div>
       )}
     </>
   )
@@ -352,37 +365,50 @@ export function LearnScreen({
         <div className="metric"><span className="label">3BV</span><span className="value mono" ref={bvRef}>—</span></div>
       </section>
 
-      <main className="board-wrap" ref={wrapRef}>
-        <canvas ref={canvasRef} className="board" />
+      {/* Board and coach rail sit side by side. Never an overlay on the canvas:
+          a floating panel hides the very cells the overlay is pointing at. */}
+      <div className="learn-body">
+        <main className="board-wrap" ref={wrapRef}>
+          <canvas ref={canvasRef} className="board" />
 
-        {blocked && (
-          <div className="verdict blocked" role="alert">
-            <span className="tag">Blocked</span>
-            <span>{blocked.msg}</span>
-          </div>
-        )}
+          {blocked && (
+            <div className="verdict blocked" role="alert">
+              <span className="tag">Blocked</span>
+              <span>{blocked.msg}</span>
+            </div>
+          )}
 
-        {(phase === 'won' || phase === 'lost') && result && !coachOpen && (
+          {(phase === 'won' || phase === 'lost') && result && !coachOpen && (
+            <button
+              className={`verdict ${phase === 'won' ? 'win' : 'loss'}`}
+              onClick={() => setCoachOpen(true)}
+              title="Show analysis"
+            >
+              <span className="tag">{phase === 'won' ? 'Cleared' : 'Boom'}</span>
+              <span className="mono">{secs(result.elapsedMs)}s</span>
+              <span className="dim">Analysis →</span>
+            </button>
+          )}
+        </main>
+
+        <aside className="coach-rail" aria-label="Coach">
+          <span className="label">Next move</span>
+          {phase === 'idle' && <p className="rowsub">Open any cell to begin.</p>}
+          {phase !== 'idle' && phase !== 'playing' && (
+            <p className="rowsub">Game over — open the analysis for the full breakdown.</p>
+          )}
+          {phase === 'playing' && !settings.showHints && (
+            <p className="rowsub">Hints are hidden. Wrong and wasteful moves are still blocked.</p>
+          )}
+          {phase === 'playing' && settings.showHints && hint?.analysis && <HintBody hint={hint} />}
           <button
-            className={`verdict ${phase === 'won' ? 'win' : 'loss'}`}
-            onClick={() => setCoachOpen(true)}
-            title="Show analysis"
+            className="wide"
+            style={{ marginTop: 'auto' }}
+            onClick={() => set('showHints', !settings.showHints)}
           >
-            <span className="tag">{phase === 'won' ? 'Cleared' : 'Boom'}</span>
-            <span className="mono">{secs(result.elapsedMs)}s</span>
-            <span className="dim">Analysis →</span>
+            {settings.showHints ? 'Hide hints' : 'Show hints'}
           </button>
-        )}
-      </main>
-
-      {/* Below the board, never over it: an overlay panel would hide the very
-          cells the overlay is pointing at. */}
-      <div className="hint-strip">
-        {phase === 'idle' && <span className="rowsub">Open a cell to begin.</span>}
-        {phase === 'playing' && !settings.showHints && (
-          <span className="rowsub">Hints hidden — wrong and wasteful moves are still blocked.</span>
-        )}
-        {phase === 'playing' && settings.showHints && hint?.analysis && <HintBody hint={hint} />}
+        </aside>
       </div>
 
       <canvas ref={ribbonRef} className="ribbon" aria-label="Solve ribbon" />

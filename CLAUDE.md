@@ -126,9 +126,34 @@ as well (§7.3's "strictly worse by click count").
   the recommendation is whatever the greedy emitted first and can cite a twelve-witness tank
   enumeration while a plain 1-1 sits available.
 
-§7.3 assumed blocking would need a worker. It does not: `npm run bench:optimal` reports p90
-~4ms per expert position, inside a frame, so learning mode analyses synchronously. Timed play
-still never calls any of it.
+§7.3 assumed blocking would need a worker. It does not, but the margin is thinner than it
+looks: `npm run bench:optimal` reports p90 ~29ms per expert position. That is over a frame,
+and it is affordable only because the analysis runs *after* a move is applied — the board
+updates instantly and the hint trails it. A rejected click pays one extra `costOf` (~14ms)
+before being refused. Timed play still never calls any of it.
+
+### The greedy is where the click cost comes from, so watch it
+
+`greedyFrom` **interleaves** chording and opening: exhaust profitable chords, take one plain
+open, repeat. An earlier shape ran the chord loop to exhaustion once and then opened
+everything else, so chording only ever happened off the first cascade's frontier — chords were
+1.6% of the ZiNi path and ZiNi landed within 2% of 3BV, which is not a chording player at all.
+mzrg.com's definition is explicit that both metrics are "much lower than 3BV"; that is the
+property `test/zini.test.ts` pins down, since "never exceeds 3BV" is also satisfied by an
+implementation that never chords.
+
+`chordCells` must not allocate. The greedy calls it tens of thousands of times per solve, and
+a version that copied the board and diffed it afterwards accounted for ~70% of the runtime.
+
+Ties break towards the cursor. Without that the greedy picks its next plain open by lowest
+cell index, which sends the player back to the top-left corner before every straggler. It
+barely moves the aggregate (2.27 → 2.25 cells of travel per click) but it decides *which* cell
+gets recommended, which is what a player actually feels.
+
+`zini` runs the greedy twice — unrestricted and solver-restricted — and keeps the cheaper.
+`HZiNi >= ZiNi` is definitional (omniscience permits every line the restricted oracle does)
+but a *greedy* does not inherit it: more available chords means different local choices. Seed
+`hz0` produced ZiNi 14 against HZiNi 13 before this.
 
 Rules that are load-bearing, not stylistic:
 

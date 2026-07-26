@@ -42,10 +42,12 @@ const EMPTY: Hint = { analysis: null, pattern: null }
  * genuinely tied line scores zero and the greedy's own tie-breaking is never
  * reported as the player's mistake.
  *
- * The analysis is recomputed synchronously after each move. §7.3 assumed that
- * would need a worker; measurement says otherwise — `npm run bench:optimal`
- * reports p90 3.9ms per expert position, inside a frame. Timed play still never
- * calls any of this.
+ * The analysis is recomputed synchronously after each move, not in a worker as
+ * §7.3 assumed. `npm run bench:optimal` puts it at p90 ~29ms per expert position
+ * — over a frame, but it runs *after* the move is applied, so the board updates
+ * immediately and only the hint trails. A rejected click pays one extra cost
+ * evaluation (~14ms) before it is refused. Timed play still never calls any of
+ * this.
  */
 export class LearningGame extends Game {
   onBlocked: ((b: Blocked) => void) | null = null
@@ -59,6 +61,13 @@ export class LearningGame extends Game {
    * the wrong position.
    */
   private analysedBoard: object | null = null
+  /**
+   * The last cell the player acted on. Passed to the analysis so that, among
+   * moves the cost model rates identically, the one nearest the cursor wins —
+   * a plan that criss-crosses the board is optimal on paper and nothing like
+   * how the game is actually played.
+   */
+  private cursor = -1
 
   /**
    * The analysis of the position as it stands right now.
@@ -73,7 +82,7 @@ export class LearningGame extends Game {
   private ensure(): PositionAnalysis | null {
     if (!this.board || this.phase !== 'playing') return null
     if (!this.analysis || this.analysedBoard !== this.board) {
-      this.analysis = analyzePosition(this.board)
+      this.analysis = analyzePosition(this.board, this.cursor)
       this.analysedBoard = this.board
     }
     return this.analysis
@@ -146,6 +155,7 @@ export class LearningGame extends Game {
         : 'guess-available')
     if (!ok) return
     super.open(cell)
+    this.cursor = cell
     this.refresh()
   }
 
@@ -157,6 +167,7 @@ export class LearningGame extends Game {
       a.available.mine.has(cell) ? null : 'guess-available')
     if (!ok) return
     super.flag(cell)
+    this.cursor = cell
     this.refresh()
   }
 
@@ -165,6 +176,7 @@ export class LearningGame extends Game {
     const ok = !legal || this.gate({ type: 'chord', cell }, () => null)
     if (!ok) return
     super.chord(cell)
+    this.cursor = cell
     this.refresh()
   }
 
