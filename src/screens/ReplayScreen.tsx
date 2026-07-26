@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { COACH_VERSION, type CachedGrades } from '../../engine/coach/grade.ts'
 import { describePattern } from '../../engine/coach/patterns.ts'
 import { MISTAKE_CLASSES, type GameRecord } from '../../engine/record.ts'
+import { rankMistakes, tally } from '../../engine/coach/severity.ts'
 import { stateAfter } from '../../engine/seek.ts'
 import { ticksOf } from '../game/controller.ts'
 import { gradeInWorker } from '../game/coachClient.ts'
@@ -45,6 +46,7 @@ export function ReplayScreen({
   const total = replay.events.length
 
   const [moveIndex, setMoveIndex] = useState(0)
+  const [listOpen, setListOpen] = useState(false)
   const [grades, setGrades] = useState<CachedGrades | null>(null)
   const [pending, setPending] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -140,9 +142,14 @@ export function ReplayScreen({
     }
   }
 
-  const mistakeCount = grades
-    ? grades.grades.filter((g) => MISTAKE_CLASSES.includes(g.class)).length
-    : 0
+  // Worst first — reviewing is triage, so the list is ordered by what each
+  // mistake cost rather than by when it happened.
+  const ranked = useMemo(
+    () => (grades ? rankMistakes(grades.grades, replay) : []),
+    [grades, replay],
+  )
+  const counts = useMemo(() => tally(ranked), [ranked])
+  const mistakeCount = counts.total
 
   /** Seek by clicking the ribbon: tick widths are time-proportional (§8.3). */
   const seekFromRibbon = (e: React.MouseEvent<HTMLCanvasElement>) => {
@@ -223,6 +230,24 @@ export function ReplayScreen({
         />
       </div>
 
+      {listOpen && (
+        <section className="mistakes" aria-label="Mistakes, worst first">
+          {ranked.length === 0 && <p className="empty dim">No mistakes in this game.</p>}
+          {ranked.map((m) => (
+            <button
+              key={m.grade.moveIndex}
+              className={`mrow ${m.grade.moveIndex === moveIndex ? 'current' : ''}`}
+              onClick={() => { setMoveIndex(m.grade.moveIndex); setListOpen(false) }}
+            >
+              <span className={`chip sev-${m.severity}`}>{m.severity}</span>
+              <span className="mono dim">#{m.grade.moveIndex}</span>
+              <span className="why">{m.reason}</span>
+              {m.grade.patternId && <span className="chip ghost">{m.grade.patternId}</span>}
+            </button>
+          ))}
+        </section>
+      )}
+
       <section className="explain" aria-live="polite">
         {pending && <p className="dim">Grading…</p>}
         {error && <p className="dim">Coach unavailable: {error}</p>}
@@ -255,6 +280,16 @@ export function ReplayScreen({
         </button>
         <button className="primary" onClick={nextMistake} disabled={!grades || mistakeCount === 0}>
           Next mistake
+        </button>
+        <button
+          className="ghost"
+          aria-expanded={listOpen}
+          onClick={() => setListOpen((v) => !v)}
+          disabled={!grades || mistakeCount === 0}
+        >
+          {counts.critical > 0 && <span className="sev-dot critical" />}
+          {counts.major > 0 && <span className="sev-dot major" />}
+          Worst first · {mistakeCount}
         </button>
       </footer>
     </div>

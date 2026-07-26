@@ -585,3 +585,40 @@ button.ghost:hover:not(:disabled) { color: var(--ink); }
 .chip.error { color: var(--bad); border-color: currentColor; }
 .chip.necessary-guess { color: var(--ink-dim); }
 .chip.ghost { color: var(--ink-dim); font-weight: 500; }
+
+/* Mistake triage list — worst first, so the fix order is the read order. */
+.mistakes {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  border-top: 1px solid var(--rule);
+}
+.mistakes .empty { padding: var(--s5) var(--s4); text-align: center; }
+
+.mrow {
+  display: flex;
+  align-items: center;
+  gap: var(--s2);
+  width: 100%;
+  min-height: 44px;
+  padding: var(--s2) var(--s4);
+  border: none;
+  border-bottom: 1px solid var(--rule);
+  border-radius: 0;
+  background: none;
+  text-align: left;
+  font-size: 13px;
+}
+.mrow:hover { background: var(--panel); }
+.mrow.current { background: var(--panel); box-shadow: inset 3px 0 0 var(--accent); }
+.mrow .why { flex: 1; min-width: 0; }
+
+/* Severity reuses the number palette: 3 red, 1 blue, dim for the cheap ones. */
+.chip.sev-critical { color: var(--bad); border-color: currentColor; text-transform: uppercase; }
+.chip.sev-major { color: var(--info); border-color: currentColor; text-transform: uppercase; }
+.chip.sev-minor { color: var(--ink-dim); text-transform: uppercase; }
+
+.sev-dot { width: 6px; height: 6px; border-radius: 50%; display: inline-block; margin-right: 2px; }
+.sev-dot.critical { background: var(--bad); }
+.sev-dot.major { background: var(--info); }
