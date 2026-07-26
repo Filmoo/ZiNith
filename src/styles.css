@@ -449,3 +449,139 @@ input[type="range"] { accent-color: var(--accent); max-width: 46%; }
 @media (prefers-reduced-motion: reduce) {
   *, *::after { animation: none !important; transition: none !important; }
 }
+
+/* ── History and replay (§14.3) ─────────────────────────────────────────── */
+
+/*
+ * These sit over the play screen rather than replacing it: PlayScreen owns the
+ * canvas and the running game, so it stays mounted and hidden underneath.
+ */
+.screen {
+  position: fixed;
+  inset: 0;
+  z-index: 20;
+  display: flex;
+  flex-direction: column;
+  background: var(--surface);
+  padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+}
+
+button.ghost {
+  background: none;
+  border-color: var(--rule);
+  color: var(--ink-dim);
+  font-size: 13px;
+  padding: 0 var(--s3);
+}
+button.ghost:hover:not(:disabled) { color: var(--ink); }
+
+.filters {
+  display: flex;
+  gap: var(--s2);
+  flex: none;
+  padding: var(--s3);
+  overflow-x: auto;
+  scrollbar-width: none;
+  background: var(--panel);
+  border-bottom: 1px solid var(--rule);
+}
+.filters::-webkit-scrollbar { display: none; }
+.filters select { flex: none; font-size: 13px; }
+
+.rows {
+  flex: 1;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.rows .empty { padding: var(--s6) var(--s4); text-align: center; }
+
+/*
+ * One line per game, tabular figures throughout so the columns actually line up
+ * when you scan for an outlier — which is the entire point of the screen.
+ */
+.screen .row,
+.rowhead {
+  display: grid;
+  grid-template-columns: 10px 68px 40px 64px 56px 52px 52px 1fr;
+  align-items: center;
+  gap: var(--s2);
+  width: 100%;
+  padding: 0 var(--s4);
+  text-align: left;
+  font-size: 13px;
+}
+
+/* Column labels, or 14.49 and 50% are just numbers on a wall. */
+.rowhead {
+  flex: none;
+  min-height: 28px;
+  border-bottom: 1px solid var(--rule);
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-dim);
+}
+
+.screen .row {
+  min-height: 44px;
+  border: none;
+  border-bottom: 1px solid var(--rule);
+  border-radius: 0;
+  background: none;
+}
+.screen .row:hover { background: var(--panel); }
+.screen .row .time,
+.screen .row .bvs,
+.screen .row .acc,
+.screen .row .ioe,
+.rowhead .r { text-align: right; }
+.screen .row .mark {
+  font-size: 11px;
+  color: var(--ink-dim);
+  border: 1px solid var(--rule);
+  border-radius: 5px;
+  padding: 1px var(--s1);
+  white-space: nowrap;
+}
+
+.screen .dot { width: 8px; height: 8px; border-radius: 50%; }
+.screen .dot.win { background: var(--good); }
+.screen .dot.loss { background: var(--bad); }
+.screen .dot.abandoned { background: var(--ink-dim); }
+
+.ribbon.seekable { cursor: pointer; }
+
+.scrub { flex: none; padding: var(--s2) var(--s4) 0; }
+/* The settings sliders are capped at 46%; the scrubber has to span the ribbon it
+   sits under, or the two stop lining up. */
+.scrub input { width: 100%; max-width: none; }
+
+.explain {
+  flex: none;
+  min-height: 76px;
+  padding: var(--s3) var(--s4);
+}
+.explain .verdict-line {
+  display: flex;
+  align-items: center;
+  gap: var(--s2);
+  margin: 0 0 var(--s2);
+}
+.explain .blurb { margin: 0; font-size: 14px; }
+.explain p + p { margin-top: var(--s1); }
+
+.chip {
+  font-size: 12px;
+  font-weight: 600;
+  border-radius: 6px;
+  padding: 2px var(--s2);
+  border: 1px solid var(--rule);
+  white-space: nowrap;
+}
+.chip.optimal { color: var(--good); border-color: currentColor; }
+.chip.suboptimal { color: var(--info); border-color: currentColor; }
+.chip.unnecessary-guess,
+.chip.error { color: var(--bad); border-color: currentColor; }
+.chip.necessary-guess { color: var(--ink-dim); }
+.chip.ghost { color: var(--ink-dim); font-weight: 500; }

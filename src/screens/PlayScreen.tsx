@@ -3,6 +3,7 @@ import { Game, type GameConfig, type Phase, type Snapshot } from '../game/contro
 import { BoardRenderer } from '../render/renderer.ts'
 import { drawRibbon, gradeColor } from '../render/ribbon.ts'
 import { gradeInWorker } from '../game/coachClient.ts'
+import { saveGrades, saveReplay } from '../store/db.ts'
 import { CoachPanel } from './CoachPanel.tsx'
 import type { CachedGrades } from '../../engine/coach/grade.ts'
 import { attachInput } from '../input/pointer.ts'
@@ -21,12 +22,14 @@ export function PlayScreen({
   set,
   dark,
   onOpenSettings,
+  onOpenHistory,
   menuOpen,
 }: {
   settings: Settings
   set: <K extends keyof Settings>(k: K, v: Settings[K]) => void
   dark: boolean
   onOpenSettings: () => void
+  onOpenHistory: () => void
   menuOpen: boolean
 }) {
   const wrapRef = useRef<HTMLDivElement>(null)
@@ -65,8 +68,12 @@ export function PlayScreen({
 
   const newGame = () => {
     // §4.5 — a result is recorded whether won or lost, so abandoning is logged
-    // rather than silently discarded.
-    gameRef.current?.abandon()
+    // rather than silently discarded. The write has to happen here rather than
+    // in the phase watcher: `abandon()` is immediately followed by a new `Game`,
+    // and the frame loop is not guaranteed to observe the transition first.
+    const prev = gameRef.current
+    prev?.abandon()
+    if (prev?.replay && prev.replay.events.length > 0) void saveReplay(prev.replay)
     setCoachOpen(false)
     setGrades(null)
     gradesRef.current = null
@@ -171,11 +178,17 @@ export function PlayScreen({
             setResult(g.snapshot())
             const replay = g.replay
             if (replay) {
+              // Written before grading so the game appears in history at once,
+              // rather than only when the worker comes back (§14.3).
+              void saveReplay(replay)
               setCoachPending(true)
               setCoachError(null)
               setCoachOpen(true)
               gradeInWorker(replay).then(
-                (cg) => { setGrades(cg); gradesRef.current = cg; setCoachPending(false) },
+                (cg) => {
+                  setGrades(cg); gradesRef.current = cg; setCoachPending(false)
+                  void saveGrades(cg)
+                },
                 (err: Error) => { setCoachError(err.message); setCoachPending(false) },
               )
             }
@@ -221,6 +234,7 @@ export function PlayScreen({
             </button>
           ))}
         </div>
+        <button className="icon" onClick={onOpenHistory} aria-label="History" title="History">◷</button>
         <button className="icon" onClick={onOpenSettings} aria-label="Settings">☰</button>
       </header>
 

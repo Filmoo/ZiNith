@@ -13,6 +13,20 @@ export type Phase = 'idle' | 'playing' | 'won' | 'lost'
 /** One tick of the solve ribbon (§8.3). Colour comes later from the coach. */
 export interface Tick { type: EventType; atMs: number; durMs: number }
 
+/**
+ * Ticks for a stored game. The live ribbon is fed by `Game.ticks`, but a replay
+ * opened from history has only the event log, so rebuild them from the
+ * timestamps — the ribbon is the same object in-game and in review (§8.3).
+ */
+export function ticksOf(r: Replay): Tick[] {
+  let prev = 0
+  return r.events.map((e) => {
+    const durMs = Math.max(0, e.t - prev)
+    prev = e.t
+    return { type: e.type, atMs: e.t, durMs }
+  })
+}
+
 export interface GameConfig {
   preset: PresetId
   width: number
