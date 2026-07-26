@@ -1,1 +1,1 @@
-{"root":["./src/main.tsx","./src/engine/presets.ts","./src/ui/App.tsx","./vite.config.ts"],"version":"5.9.3"}
+{"root":["./src/main.tsx","./src/engine/board.ts","./src/engine/game.ts","./src/engine/generate.ts","./src/engine/metrics.test.ts","./src/engine/metrics.ts","./src/engine/presets.ts","./src/engine/rng.ts","./src/engine/solver.test.ts","./src/engine/solver.ts","./src/engine/topology.ts","./src/ui/App.tsx","./vite.config.ts"],"version":"5.9.3"}
