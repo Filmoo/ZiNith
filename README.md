@@ -2,15 +2,34 @@
 
 A Minesweeper training app for speedrunners. Web-first, packaged for Android.
 
+A real solver grades every move after every game, so the analysis is the product.
+Expert (30×16, 99 mines) with no-guess on is the minesweeper.online ranked
+configuration, and it is the default rather than an opt-in mode.
+
+## Documentation
+
+- [`CLAUDE.md`](CLAUDE.md) — orientation, layering rules, known traps. Start here.
+- [`docs/spec-delta-v1.1.md`](docs/spec-delta-v1.1.md) — authoritative planning
+  document: revised phases (§12), home/history (§14), drill ladder (§10.3).
+  The **base build spec is not in this repository**; only this delta is tracked.
+
 ## Status
 
-| Phase | State |
-|---|---|
-| P0 scaffold | done |
-| P1 engine — board, RNG, solver tiers 1–4, 3BV/ZiNi/HZiNi | **done, verified** |
-| P2 playable — canvas, input, 4 control schemes, timer, ribbon | boots and plays in desktop Chrome; touch schemes need on-device verification |
-| P9 release pipeline — tag to APK | done |
-| P3–P8 | not started |
+Phases follow §12 of the spec delta.
+
+| Phase | Content | State |
+|---|---|---|
+| P0 | Scaffold | done |
+| P1 | Engine — board, RNG, solver tiers 1–4, 3BV/ZiNi/HZiNi | **done, test-verified** |
+| P2 | Playable — canvas, input, control schemes | plays in desktop Chrome; needs design and control work |
+| P3 | Presets + no-guess pool | preset table done; **pool not built** |
+| P4 | Replay capture, solve ribbon, history screen | not started |
+| P5 | Coach: auto-run on game end, grade cache, overlays | not started |
+| P6 | Metric modes + comparison | not started |
+| P7 | Pattern library, frequency instrumentation, drills | not started |
+| P8 | Learning mode: blocking, hints, undo | not started |
+| P9 | Android via Capacitor | pipeline done; export/import must precede shipping (§15) |
+| P10 | Cloud sync | not started |
 
 ## Requirements
 
@@ -99,22 +118,31 @@ Recorded on this codebase rather than assumed:
 - **No-guess generation, expert (30×16, 99 mines), n=400**: p50 8ms, p90 26ms,
   p99 53ms, max 115ms, worst case 49 attempts.
 
-That second number retires the pre-generated pool described in §4.4 of the
-spec — see "Spec deviations" below.
+Note that the tail of that distribution, not the median, is what §4.4 cares
+about.
 
 ## Spec deviations
 
-1. **No generation pool.** §4.4 calls for an IndexedDB pool of ~20 accepted
-   seeds per preset. Measured generation is fast enough to run on the first
-   click instead. This also resolves a latent conflict: a board is defined by
-   `(seed, firstClick)`, so a pre-generated pool would have had to choose the
-   player's opening cell for them. Generation still belongs in a worker as
-   insurance against the tail.
-2. **`generate.ts` is its own module**, not part of `board.ts`, because
+1. **`generate.ts` is its own module**, not part of `board.ts`, because
    no-guess generation depends on the solver and `board.ts` must not.
-3. **Node's test runner**, not Vitest, for the engine. Keeps §2's "zero
+2. **Node's test runner**, not Vitest, for the engine. Keeps §2's "zero
    dependencies, runnable in Node" literally true and makes CI installs
    unnecessary for the test job.
+
+### Superseded deviation: the generation pool
+
+An earlier revision of this README argued that the measured generation speed
+above **retired** the pre-generated pool of §4.4, generating on the first click
+instead. **Spec delta v1.1 reverses that**, and the delta wins: no-guess is now
+the default for every preset rather than for competitive play only, which
+promotes the pool from an optimization to load-bearing infrastructure. The
+per-preset depths are already encoded as `poolTarget` in
+[`engine/presets.ts`](engine/presets.ts) (5 / 10 / 20).
+
+The underlying tension is real and still has to be handled: a board is defined
+by `(seed, firstClick)`, so a pool cannot pre-commit the player's opening cell.
+A pooled *seed* must therefore be validated against the actual first click, with
+the generating state shown if the Expert pool runs dry.
 
 ## Verification state
 
@@ -129,9 +157,27 @@ Still unverified, because a desktop browser cannot answer it:
   two-finger chord), and the `longPressMs` default of 180ms
 - haptics, which are a Capacitor no-op outside an APK
 
-### Known issue
+### Known defects
 
-`Snapshot.efficiency` and `Snapshot.bvs` divide the **whole board's** 3BV by
-clicks and elapsed time, so they are only meaningful once a game is won —
-mid-game the footer shows nonsense like `15700% IOE`. A live figure needs 3BV
-*completed so far*, which nothing tracks yet.
+Full list, with the browser-verification pitfalls, is in [`CLAUDE.md`](CLAUDE.md).
+The two that matter most:
+
+1. **No fonts are loaded.** `index.html` declares no `@font-face` and no font
+   link, yet the design system asks for Archivo Expanded / Inter Tight / IBM Plex
+   Mono and `atlas.ts` requests IBM Plex Mono for the canvas digits. All three
+   silently fall back to `system-ui`, so the design has never actually been
+   rendered as specified. Fonts must be self-hosted — the Android build is
+   offline, so a CDN link would fail there.
+2. **`Snapshot.efficiency` and `Snapshot.bvs` are wrong mid-game.** Both divide
+   the *whole board's* 3BV by clicks and elapsed time, so they are meaningful
+   only on a finished game; the footer currently shows nonsense like
+   `15700% IOE`. A live figure needs 3BV *completed so far*, which nothing
+   tracks yet.
+
+### Outstanding UI work
+
+The play screen is functional but not production quality, and this is the next
+body of work: there is no menu beyond a single "New game" button, and the
+desktop control scheme requires a long press to flag instead of a right click.
+Mouse and touch need separate schemes selected by pointer type — left/right/middle
+click on desktop, the existing gesture set on touch.
