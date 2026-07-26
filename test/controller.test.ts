@@ -80,11 +80,56 @@ test('replay records every move and finishes with a result', () => {
   assert.ok(g.replay!.duration >= 0)
 })
 
-test('metrics: 3BV is fixed at generation, efficiency tracks clicks', () => {
+test('metrics: whole-board 3BV is fixed at generation, progress is not', () => {
   const g = new Game(cfg())
   g.open(40)
   const s1 = g.snapshot()
   assert.ok(s1.threeBV > 0)
   assert.equal(s1.clicks, 1)
-  assert.equal(s1.efficiency, s1.threeBV / 1)
+  // The opening click clears exactly one 3BV unit: a cascade covers one
+  // connected zero-region, and the numbers bordering it belong to that region
+  // rather than counting separately.
+  assert.equal(s1.threeBVDone, 1)
+  const before = s1.threeBV
+  g.open(g.board!.state.findIndex((s: number) => s === HIDDEN))
+  assert.equal(g.snapshot().threeBV, before, '3BV describes the board, not the progress')
+})
+
+test('metrics: efficiency and 3BV/s use cleared 3BV, never the whole board', () => {
+  const g = new Game(cfg())
+  g.open(40)
+  const s = g.snapshot()
+  // The old defect was dividing whole-board 3BV by clicks, which reported
+  // efficiencies in the thousands of percent one click into a game.
+  assert.equal(s.efficiency, s.threeBVDone / s.clicks)
+  assert.ok(s.efficiency <= 1, `IOE must never exceed 100%, got ${s.efficiency * 100}%`)
+  assert.ok(s.bvs <= s.threeBVDone / (s.elapsedMs / 1000) + 1e-9)
+})
+
+test('metrics: a won game has cleared exactly its 3BV', () => {
+  const g = new Game(cfg({ width: 16, height: 16, mines: 40, preset: 'intermediate' }))
+  g.open(120)
+  for (let step = 0; step < 2000 && g.phase === 'playing'; step++) {
+    const r = solve(solverView(g.board!))
+    for (const d of r.deductions) {
+      for (const c of d.subject) {
+        if (g.board!.state[c] !== HIDDEN) continue
+        if (d.verdict === 'safe') g.open(c)
+        else g.flag(c)
+      }
+    }
+  }
+  assert.equal(g.phase, 'won')
+  const s = g.snapshot()
+  assert.equal(s.threeBVDone, s.threeBV, 'a win clears every 3BV unit')
+  assert.ok(s.efficiency > 0 && s.efficiency <= 1)
+})
+
+test('metrics: flags earn no 3BV credit', () => {
+  const g = new Game(cfg())
+  g.open(40)
+  const done = g.snapshot().threeBVDone
+  const hidden = g.board!.state.findIndex((s: number) => s === HIDDEN)
+  g.flag(hidden)
+  assert.equal(g.snapshot().threeBVDone, done, 'flagging clears nothing')
 })

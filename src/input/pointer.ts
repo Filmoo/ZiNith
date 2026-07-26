@@ -4,9 +4,12 @@ import { REVEALED, HIDDEN } from '../../engine/types.ts'
 import { tapChord, tapFlag } from '../platform/haptics.ts'
 
 export interface InputOpts {
+  /** Gesture routing for touch only; the mouse has its own fixed mapping. */
   scheme: Scheme
   /** §13.1 — still to be tuned on device against The Clean One. */
   longPressMs: number
+  /** Left-click on a revealed number chords, as on minesweeper.online. */
+  mouseLeftChord: boolean
   onChange: () => void
 }
 
@@ -15,8 +18,20 @@ const SLOP = 9 // px of movement before a tap becomes a drag
 interface P { id: number; x0: number; y0: number; x: number; y: number; cell: number; t: number }
 
 /**
- * Pointer handling (§7.1, §7.2). Opens fire on pointerdown, never on click.
- * Returns a detach function.
+ * Pointer handling (§7.1, §7.2). Returns a detach function.
+ *
+ * Mouse and touch are deliberately different input languages, routed per event
+ * by `pointerType` rather than sniffed once per device — a Surface or an iPad
+ * with a trackpad has both, and the right mapping is whichever one the user
+ * just used.
+ *
+ * Mouse            left open (chord on a number) · right flag · middle chord
+ * Touch            tap / long press / drag, per `scheme`
+ *
+ * Both open on pointerdown per §7.1. That still leaves two-button chording
+ * intact, because chording only ever applies to an already-revealed number and
+ * `Game.open` is a no-op on one — so the left press that precedes the right
+ * press cannot have consumed the cell.
  */
 export function attachInput(
   canvas: HTMLCanvasElement,
@@ -54,6 +69,24 @@ export function attachInput(
   const doFlag = (cell: number) => { game().flag(cell); tapFlag(); opts().onChange() }
   const doChord = (cell: number) => { game().chord(cell); tapChord(); opts().onChange() }
 
+  // ── Mouse ────────────────────────────────────────────────────────────────
+
+  const onMouseDown = (e: PointerEvent) => {
+    const cell = cellOf(e)
+    if (cell < 0) return
+    e.preventDefault()
+
+    // Middle button, or the classic both-buttons-held gesture, is always a chord.
+    if (e.button === 1 || (e.buttons & 3) === 3) { doChord(cell); return }
+    if (e.button === 2) { doFlag(cell); return }
+    if (e.button !== 0) return
+
+    if (isNumber(cell)) { if (opts().mouseLeftChord) doChord(cell) }
+    else doOpen(cell)
+  }
+
+  // ── Touch ────────────────────────────────────────────────────────────────
+
   /** A completed tap, routed by control scheme (§7.1). */
   const tap = (cell: number) => {
     if (cell < 0) return
@@ -79,6 +112,8 @@ export function attachInput(
   }
 
   const onDown = (e: PointerEvent) => {
+    if (e.pointerType === 'mouse') { onMouseDown(e); return }
+
     canvas.setPointerCapture?.(e.pointerId)
     const cell = cellOf(e)
     pointers.set(e.pointerId, { id: e.pointerId, x0: e.clientX, y0: e.clientY, x: e.clientX, y: e.clientY, cell, t: performance.now() })
@@ -105,6 +140,7 @@ export function attachInput(
   }
 
   const onMove = (e: PointerEvent) => {
+    if (e.pointerType === 'mouse') return
     const p = pointers.get(e.pointerId)
     if (!p) return
     p.x = e.clientX
@@ -144,6 +180,7 @@ export function attachInput(
   }
 
   const onUp = (e: PointerEvent) => {
+    if (e.pointerType === 'mouse') return
     const p = pointers.get(e.pointerId)
     pointers.delete(e.pointerId)
     clearLong()
@@ -176,12 +213,16 @@ export function attachInput(
   }
 
   const noMenu = (e: Event) => e.preventDefault()
+  // Chording with both buttons otherwise selects surrounding text on some
+  // browsers, and the middle button starts an autoscroll.
+  const noAux = (e: Event) => e.preventDefault()
 
   canvas.addEventListener('pointerdown', onDown)
   canvas.addEventListener('pointermove', onMove)
   canvas.addEventListener('pointerup', onUp)
   canvas.addEventListener('pointercancel', onCancel)
   canvas.addEventListener('contextmenu', noMenu)
+  canvas.addEventListener('auxclick', noAux)
 
   return () => {
     canvas.removeEventListener('pointerdown', onDown)
@@ -189,6 +230,7 @@ export function attachInput(
     canvas.removeEventListener('pointerup', onUp)
     canvas.removeEventListener('pointercancel', onCancel)
     canvas.removeEventListener('contextmenu', noMenu)
+    canvas.removeEventListener('auxclick', noAux)
     clearLong()
   }
 }

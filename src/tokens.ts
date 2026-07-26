@@ -1,16 +1,25 @@
 /**
  * §11: the board is the only colourful thing on screen. Every other coloured
  * element earns its colour by referring back to a number.
+ *
+ * `accent` is the one addition to that rule, and it earns its place the same
+ * way: it is the canonical "1" blue, reused for focus rings and the active
+ * selection so interactive affordance never needs a new hue.
  */
 export const TOKENS = {
-  surface: '#EDF0F4',
-  cellHidden: '#DCE2EA',
-  cellHiddenEdge: '#E9EEF4',
-  cellOpen: '#F6F8FA',
-  rule: '#C3CCD8',
-  ink: '#1C2430',
-  inkDim: '#6B7684',
+  /** page background */
+  surface: '#EFF2F6',
+  /** raised chrome: bars, sheets, cards */
+  panel: '#FFFFFF',
+  cellHidden: '#D6DDE7',
+  /** top-edge highlight that gives a hidden cell its bevel */
+  cellHiddenEdge: '#E8EDF3',
+  cellOpen: '#F9FAFC',
+  rule: '#C7D0DC',
+  ink: '#131922',
+  inkDim: '#65717F',
   alert: '#C4262E',
+  accent: '#1D4ED8',
 } as const
 
 /** Canonical Minesweeper palette — also the app's entire data-vis system. */
@@ -20,14 +29,16 @@ export const NUMBER_COLORS = [
 ] as const
 
 export const DARK = {
-  surface: '#12161C',
-  cellHidden: '#232A33',
-  cellHiddenEdge: '#2C343E',
-  cellOpen: '#171C23',
-  rule: '#39424E',
-  ink: '#E7ECF2',
-  inkDim: '#8C97A5',
+  surface: '#0D1116',
+  panel: '#161B22',
+  cellHidden: '#242C37',
+  cellHiddenEdge: '#2F3843',
+  cellOpen: '#11161C',
+  rule: '#313A45',
+  ink: '#E6EBF2',
+  inkDim: '#8A95A4',
   alert: '#FF5A61',
+  accent: '#5C8BFF',
 } as const
 
 /** Dark theme lifts lightness but must not re-hue the numbers. */

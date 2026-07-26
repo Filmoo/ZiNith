@@ -21,7 +21,7 @@ Phases follow §12 of the spec delta.
 |---|---|---|
 | P0 | Scaffold | done |
 | P1 | Engine — board, RNG, solver tiers 1–4, 3BV/ZiNi/HZiNi | **done, test-verified** |
-| P2 | Playable — canvas, input, control schemes | plays in desktop Chrome; needs design and control work |
+| P2 | Playable — canvas, input, control schemes | done for mouse and touch; gestures need on-device tuning |
 | P3 | Presets + no-guess pool | preset table done; **pool not built** |
 | P4 | Replay capture, solve ribbon, history screen | not started |
 | P5 | Coach: auto-run on game end, grade cache, overlays | not started |
@@ -157,27 +157,34 @@ Still unverified, because a desktop browser cannot answer it:
   two-finger chord), and the `longPressMs` default of 180ms
 - haptics, which are a Capacitor no-op outside an APK
 
+## Controls
+
+Mouse and touch are separate mappings, chosen per event from `pointerType`
+rather than sniffed once per device — a tablet with a trackpad has both.
+
+| | Mouse | Touch |
+|---|---|---|
+| Open | Left click | Tap |
+| Flag | **Right click** | Long press |
+| Chord | Middle click, both buttons, or left click on a number | Tap a number, or two-finger tap |
+| Zoom | — | Pinch |
+| New game | <kbd>N</kbd> | — |
+
+The four touch schemes (`standard`, `flag-first`, `no-flag`, `drag-flag`), the
+long-press threshold, and left-click chording are all in the settings sheet.
+
 ### Known defects
 
 Full list, with the browser-verification pitfalls, is in [`CLAUDE.md`](CLAUDE.md).
-The two that matter most:
 
-1. **No fonts are loaded.** `index.html` declares no `@font-face` and no font
-   link, yet the design system asks for Archivo Expanded / Inter Tight / IBM Plex
-   Mono and `atlas.ts` requests IBM Plex Mono for the canvas digits. All three
-   silently fall back to `system-ui`, so the design has never actually been
-   rendered as specified. Fonts must be self-hosted — the Android build is
-   offline, so a CDN link would fail there.
-2. **`Snapshot.efficiency` and `Snapshot.bvs` are wrong mid-game.** Both divide
-   the *whole board's* 3BV by clicks and elapsed time, so they are meaningful
-   only on a finished game; the footer currently shows nonsense like
-   `15700% IOE`. A live figure needs 3BV *completed so far*, which nothing
-   tracks yet.
+Fixed since the previous revision: fonts are now self-hosted and actually
+render, and `efficiency`/`bvs` now divide *cleared* 3BV rather than whole-board
+3BV, so mid-game IOE is a real percentage instead of `15700%`.
 
-### Outstanding UI work
+Still outstanding:
 
-The play screen is functional but not production quality, and this is the next
-body of work: there is no menu beyond a single "New game" button, and the
-desktop control scheme requires a long press to flag instead of a right click.
-Mouse and touch need separate schemes selected by pointer type — left/right/middle
-click on desktop, the existing gesture set on touch.
+- The touch gestures have never run on a real device. `longPressMs` defaults to
+  180ms, which §13.1 flags as a guess needing side-by-side testing against The
+  Clean One.
+- `abandon()` marks a replay as abandoned but nothing persists it, so starting a
+  new game mid-play still discards the record in practice. Lands with P4.

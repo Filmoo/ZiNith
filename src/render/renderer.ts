@@ -34,6 +34,14 @@ export class BoardRenderer {
     this.atlas = null
   }
 
+  /**
+   * Drop the cached atlas. Needed when a webfont arrives after the atlas was
+   * built, since the digits would otherwise stay baked in the fallback face.
+   */
+  invalidateAtlas() {
+    this.atlas = null
+  }
+
   /** Physical cell size in device px, always an integer to keep blits crisp. */
   private cellPx(): number {
     return Math.max(6, Math.round(this.baseCell * this.vp.scale * this.dpr))

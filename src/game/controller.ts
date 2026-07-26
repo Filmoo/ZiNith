@@ -29,16 +29,27 @@ export interface Snapshot {
   elapsedMs: number
   minesLeft: number
   clicks: number
+  /** Whole-board 3BV, fixed once the board exists. */
   threeBV: number
+  /** 3BV cleared so far. Equals `threeBV` on a win. */
+  threeBVDone: number
+  /** Live 3BV/s: cleared 3BV over elapsed time, not whole-board over elapsed. */
   bvs: number
+  /** Live IOE: cleared 3BV over clicks spent. */
   efficiency: number
   ticks: Tick[]
 }
 
 /**
  * Framework-free game controller. Owns the board and the replay log; React
- * only subscribes. Generation happens on the first click (§4.3) — measured at
- * p99 53ms for expert, so no pre-generated pool is required.
+ * only subscribes. Generation currently happens synchronously on the first
+ * click (§4.3), measured at p99 53ms for expert.
+ *
+ * Spec delta v1.1 makes no-guess the default for every preset, which promotes
+ * the §4.4 seed pool from an optimization to required infrastructure — that is
+ * P3, and it lands by replacing the `generate` callback below. Note that a pool
+ * can only supply a *seed*: a board is `(seed, firstClick)`, so the pooled seed
+ * still has to be checked against the cell the player actually opens.
  */
 export class Game {
   readonly cfg: GameConfig
@@ -50,6 +61,15 @@ export class Game {
   bv = 0
   /** Cells needing repaint since the last frame. */
   dirty = new Set<number>()
+  /**
+   * Live 3BV progress. A 3BV unit is either an opening (done as soon as any of
+   * its zero cells is revealed, since the cascade takes the rest) or a numbered
+   * cell no opening touches. `openingOf` from `threeBV` distinguishes them.
+   */
+  private openingOf: Int32Array | null = null
+  private openingsDone = new Set<number>()
+  private isolatedDone = 0
+  private bvCredited: Uint8Array | null = null
   private startPerf = 0
   private endPerf = 0
   private lastMoveMs = 0
@@ -89,7 +109,10 @@ export class Game {
       })
       if (!spec) return
       this.board = createBoard(spec)
-      this.bv = threeBV(this.board).value
+      const bv = threeBV(this.board)
+      this.bv = bv.value
+      this.openingOf = bv.openingOf
+      this.bvCredited = new Uint8Array(this.size)
       this.replay = newReplay(spec, this.cfg.preset, this.cfg.noGuess, this.cfg.scheme)
       this.startPerf = performance.now()
       this.lastMoveMs = 0
@@ -97,7 +120,9 @@ export class Game {
     }
     const b = this.board!
     if (b.state[cell] !== HIDDEN) return
-    this.markDirty(open(b, cell))
+    const revealed = open(b, cell)
+    this.markDirty(revealed)
+    this.creditBV(revealed)
     this.record('open', cell)
     this.settle()
   }
@@ -122,13 +147,34 @@ export class Game {
       this.emit()
       return
     }
-    this.markDirty(chord(b, cell))
+    const revealed = chord(b, cell)
+    this.markDirty(revealed)
+    this.creditBV(revealed)
     this.record('chord', cell)
     this.settle()
   }
 
   /** Only legal outside timed play (§7.3). Caller enforces mode. */
   private markDirty(cells: number[]) { for (const c of cells) this.dirty.add(c) }
+
+  /**
+   * Credit newly revealed cells against 3BV. Idempotent per cell, so it is safe
+   * even if a cell were ever reported twice. Mines carry no 3BV unit.
+   */
+  private creditBV(cells: number[]) {
+    const b = this.board!
+    const oo = this.openingOf, seen = this.bvCredited
+    if (!oo || !seen) return
+    for (const c of cells) {
+      if (seen[c] || b.mines[c]) continue
+      seen[c] = 1
+      if (b.adj[c] === 0) this.openingsDone.add(oo[c])
+      else if (oo[c] === -1) this.isolatedDone++
+    }
+  }
+
+  /** 3BV cleared so far. */
+  get bvDone(): number { return this.openingsDone.size + this.isolatedDone }
 
   private record(type: EventType, cell: number) {
     const t = this.elapsedMs()
@@ -176,8 +222,9 @@ export class Game {
       minesLeft: b ? this.cfg.mines - b.flagCount : this.cfg.mines,
       clicks: this.clicks,
       threeBV: this.bv,
-      bvs: secs > 0 ? this.bv / secs : 0,
-      efficiency: this.clicks > 0 ? this.bv / this.clicks : 0,
+      threeBVDone: this.bvDone,
+      bvs: secs > 0 ? this.bvDone / secs : 0,
+      efficiency: this.clicks > 0 ? this.bvDone / this.clicks : 0,
       ticks: this.ticks,
     }
   }

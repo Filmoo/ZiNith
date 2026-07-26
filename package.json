@@ -17,11 +17,14 @@
     "android:build": "cd android && ./gradlew assembleRelease"
   },
   "dependencies": {
+    "@fontsource-variable/archivo": "^5.3.0",
+    "@fontsource-variable/inter-tight": "^5.3.0",
+    "@fontsource/ibm-plex-mono": "^5.3.0",
+    "comlink": "^4.4.1",
+    "dexie": "^4.0.8",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
-    "zustand": "^4.5.5",
-    "dexie": "^4.0.8",
-    "comlink": "^4.4.1"
+    "zustand": "^4.5.5"
   },
   "devDependencies": {
     "@capacitor/android": "^6.1.2",
