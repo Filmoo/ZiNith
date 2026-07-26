@@ -50,6 +50,8 @@ export interface GameRecord {
   pool: PoolId
   scheme: Replay['scheme']
   noGuess: boolean
+  /** Played with hints on. Excluded from personal bests (§7.3). */
+  learning: boolean
   dims: [number, number]
   mines: number
   /** Compact wire form (§8.1). Under 2KB for an expert game. */
@@ -140,6 +142,7 @@ export function recordOf(r: Replay): GameRecord {
     pool: poolOf(r),
     scheme: r.scheme,
     noGuess: r.noGuess,
+    learning: r.learning,
     dims: r.dims,
     mines: r.mines,
     replay: encode(r),
@@ -191,6 +194,8 @@ export function personalBest(
 ): GameRecord | null {
   let best: GameRecord | null = null
   for (const r of records) {
+    // A time set with every certainty highlighted is not a personal best.
+    if (r.learning) continue
     if (r.preset !== preset || r.pool !== pool || r.result !== 'win') continue
     if (!best || r.durationMs < best.durationMs) best = r
   }

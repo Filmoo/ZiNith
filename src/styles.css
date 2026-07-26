@@ -622,3 +622,9 @@ button.ghost:hover:not(:disabled) { color: var(--ink); }
 .sev-dot { width: 6px; height: 6px; border-radius: 50%; display: inline-block; margin-right: 2px; }
 .sev-dot.critical { background: var(--bad); }
 .sev-dot.major { background: var(--info); }
+
+/* Learning mode is a persistent state, so its toggle stays lit while it is on. */
+button.icon[aria-pressed="true"] { color: var(--accent); background: var(--surface); }
+
+/* The one hint worth raising your voice for: a genuinely forced guess. */
+.hint.warn { color: var(--alert); }

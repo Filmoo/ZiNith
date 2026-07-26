@@ -70,6 +70,12 @@ export function MenuSheet({
             <Row title="Chord safety" sub="A wrong chord flashes instead of detonating.">
               <Switch on={settings.chordSafety} onChange={(v) => set('chordSafety', v)} label="Chord safety" />
             </Row>
+            <Row
+              title="Learning mode"
+              sub="Highlights every provable move live. Excluded from personal bests."
+            >
+              <Switch on={settings.learning} onChange={(v) => set('learning', v)} label="Learning mode" />
+            </Row>
           </div>
         </div>
 

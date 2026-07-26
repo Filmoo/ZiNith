@@ -13,8 +13,14 @@ export interface Settings {
   longPressMs: number
   mouseLeftChord: boolean
   noGuess: boolean
-  /** §7.3 — off in timed play, which is all this build has. */
+  /** §7.3 — off in timed play, forced on in learning mode. */
   chordSafety: boolean
+  /**
+   * §7.3, §P8 — learning mode. Highlights every provable move live, allows
+   * chord safety and undo, and does not write to the personal-best pools:
+   * a time set with the answers on screen is not a time.
+   */
+  learning: boolean
   theme: ThemeChoice
   haptics: boolean
 }
@@ -26,6 +32,7 @@ export const DEFAULTS: Settings = {
   mouseLeftChord: true,
   noGuess: true,
   chordSafety: false,
+  learning: false,
   theme: 'system',
   haptics: true,
 }
@@ -64,6 +71,7 @@ function parse(raw: string | null): Settings {
     mouseLeftChord: bool(o.mouseLeftChord, DEFAULTS.mouseLeftChord),
     noGuess: bool(o.noGuess, DEFAULTS.noGuess),
     chordSafety: bool(o.chordSafety, DEFAULTS.chordSafety),
+    learning: bool(o.learning, DEFAULTS.learning),
     theme: pick(o.theme, THEMES, DEFAULTS.theme),
     haptics: bool(o.haptics, DEFAULTS.haptics),
   }

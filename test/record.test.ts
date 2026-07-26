@@ -156,7 +156,7 @@ test('poolOf: flags and no-guess are independent axes (§14.2)', () => {
 const row = (over: Partial<GameRecord> = {}): GameRecord => ({
   id: 'r1', startedAt: 1, preset: 'expert', result: 'win', durationMs: 100_000, clicks: 100,
   threeBV: 120, threeBVDone: 120, bvs: 1.2, efficiency: 1.2, pool: 'flag-noguess',
-  scheme: 'standard', noGuess: true, dims: [30, 16], mines: 99, replay: '', ...over,
+  scheme: 'standard', noGuess: true, learning: false, dims: [30, 16], mines: 99, replay: '', ...over,
 })
 
 test('matchesFilter: filters compose, and mistake filtering needs graded rows', () => {
@@ -168,6 +168,14 @@ test('matchesFilter: filters compose, and mistake filtering needs graded rows', 
   assert.ok(!matchesFilter(graded, { mistake: 'error' }))
   // An ungraded row must not match a mistake filter rather than matching all.
   assert.ok(!matchesFilter(row(), { mistake: 'unnecessary-guess' }))
+})
+
+test('personalBest: a hinted game is never a personal best', () => {
+  const records = [
+    row({ id: 'hinted', durationMs: 1_000, learning: true }),
+    row({ id: 'honest', durationMs: 50_000 }),
+  ]
+  assert.equal(personalBest(records, 'expert')?.id, 'honest')
 })
 
 test('personalBest: fastest win in the pool, ignoring losses and other pools', () => {

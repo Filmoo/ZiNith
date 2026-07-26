@@ -138,6 +138,54 @@ export class BoardRenderer {
     g.drawImage(this.atlas!, this.spriteFor(b, i) * cs, 0, cs, cs, x, y, cs, cs)
   }
 
+  /**
+   * Live hint layer for learning mode (§7.3).
+   *
+   * Deliberately quieter than the review overlay: this sits under the player's
+   * hands while they are still choosing, so it marks cells without burying the
+   * numbers they are reading. Safe is the canonical "2" green, mines take the
+   * alert red the board already uses for flags — no new hues (§11).
+   */
+  hints(b: Board, safe: number[], mine: number[]) {
+    const g = this.g
+    if (!g) return
+    const cs = this.atlasCs
+    const px = (i: number) => [
+      Math.round(this.vp.ox * this.dpr) + (i % b.width) * cs,
+      Math.round(this.vp.oy * this.dpr) + Math.floor(i / b.width) * cs,
+    ] as const
+
+    g.save()
+    g.lineWidth = Math.max(2, cs * 0.09)
+
+    const green = this.theme.numbers[2] ?? '#007B00'
+    g.fillStyle = green
+    g.strokeStyle = green
+    for (const c of safe) {
+      const [x, y] = px(c)
+      g.globalAlpha = 0.16
+      g.fillRect(x, y, cs, cs)
+      g.globalAlpha = 0.85
+      g.strokeRect(x + cs * 0.1, y + cs * 0.1, cs * 0.8, cs * 0.8)
+    }
+
+    // Mines get a cross rather than a fill: the message is "do not open this",
+    // and a solid block reads too much like a flag that is already placed.
+    g.strokeStyle = this.theme.alert
+    g.globalAlpha = 0.9
+    for (const c of mine) {
+      const [x, y] = px(c)
+      g.beginPath()
+      g.moveTo(x + cs * 0.28, y + cs * 0.28)
+      g.lineTo(x + cs * 0.72, y + cs * 0.72)
+      g.moveTo(x + cs * 0.72, y + cs * 0.28)
+      g.lineTo(x + cs * 0.28, y + cs * 0.72)
+      g.stroke()
+    }
+
+    g.restore()
+  }
+
   /** Coach overlay layer (§8.3): witness shading and subject arrows. */
   overlay(b: Board, witnesses: number[], subjects: number[]) {
     const g = this.g

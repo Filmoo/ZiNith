@@ -21,6 +21,13 @@ export interface Replay {
   mines: number
   firstClick: number
   noGuess: boolean
+  /**
+   * Played with live hints on (§7.3). Kept on the replay rather than inferred,
+   * because it must survive export/import: a time set with every certainty
+   * highlighted is not comparable to one set blind, and nothing downstream can
+   * reconstruct that fact from the event log.
+   */
+  learning: boolean
   scheme: 'standard' | 'flag-first' | 'no-flag' | 'drag-flag'
   events: ReplayEvent[]
   result: Result
@@ -28,7 +35,13 @@ export interface Replay {
   startedAt: number
 }
 
-export function newReplay(spec: BoardSpec, preset: PresetId, noGuess: boolean, scheme: Replay['scheme']): Replay {
+export function newReplay(
+  spec: BoardSpec,
+  preset: PresetId,
+  noGuess: boolean,
+  scheme: Replay['scheme'],
+  learning = false,
+): Replay {
   return {
     v: 1,
     id: `${Date.now().toString(36)}-${Math.floor(Math.random() * 1e6).toString(36)}`,
@@ -38,6 +51,7 @@ export function newReplay(spec: BoardSpec, preset: PresetId, noGuess: boolean, s
     mines: spec.mineCount,
     firstClick: spec.firstClick,
     noGuess,
+    learning,
     scheme,
     events: [],
     result: 'abandoned',
@@ -53,8 +67,11 @@ export function specOf(r: Replay): BoardSpec {
 /** Compact wire form for export/import (§15). */
 export function encode(r: Replay): string {
   const ev = r.events.map((e) => `${e.t}:${e.type[0]}${e.cell}`).join(',')
+  // `learning` is appended last so replays written before it existed still
+  // decode, with the field defaulting to false.
   return [r.v, r.id, r.seed, r.preset, r.dims.join('x'), r.mines, r.firstClick,
-    r.noGuess ? 1 : 0, r.scheme, r.result, r.duration, r.startedAt, ev].join('|')
+    r.noGuess ? 1 : 0, r.scheme, r.result, r.duration, r.startedAt, ev,
+    r.learning ? 1 : 0].join('|')
 }
 
 const TYPE_OF: Record<string, EventType> = { o: 'open', f: 'flag', u: 'unflag', c: 'chord' }
@@ -72,5 +89,6 @@ export function decode(s: string): Replay {
     v: 1, id: p[1], seed: p[2], preset: p[3] as PresetId, dims: [w, h], mines: Number(p[5]),
     firstClick: Number(p[6]), noGuess: p[7] === '1', scheme: p[8] as Replay['scheme'],
     result: p[9] as Result, duration: Number(p[10]), startedAt: Number(p[11]), events,
+    learning: p[13] === '1',
   }
 }

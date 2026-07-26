@@ -2,7 +2,9 @@ import { useEffect, useRef, useState } from 'react'
 import { Game, type GameConfig, type Phase, type Snapshot } from '../game/controller.ts'
 import { BoardRenderer } from '../render/renderer.ts'
 import { drawRibbon, gradeColor } from '../render/ribbon.ts'
-import { gradeInWorker } from '../game/coachClient.ts'
+import { gradeInWorker, hintsInWorker } from '../game/coachClient.ts'
+import { solverView } from '../../engine/board.ts'
+import type { Hints } from '../../engine/coach/hints.ts'
 import { saveGrades, saveReplay } from '../store/db.ts'
 import { CoachPanel } from './CoachPanel.tsx'
 import type { CachedGrades } from '../../engine/coach/grade.ts'
@@ -16,6 +18,21 @@ const PRESET_ORDER: PresetChoice[] = ['beginner', 'intermediate', 'expert']
 const PRESET_SHORT: Record<PresetChoice, string> = { beginner: 'BEG', intermediate: 'INT', expert: 'EXP' }
 
 const secs = (ms: number) => (ms / 1000).toFixed(2)
+
+/**
+ * The learning-mode readout. `stuck` is the one worth calling out loudly: it is
+ * the only time the app can tell you a guess is genuinely forced rather than a
+ * gap in your reading.
+ */
+function learningHint(phase: Phase, h: Hints | null): string {
+  if (phase === 'idle') return 'Learning — hints appear after the first click'
+  if (phase === 'won' || phase === 'lost') return 'Learning'
+  if (!h) return 'Solving…'
+  if (h.stuck) return 'No certainty here — this one is a real guess'
+  const bits = [`${h.safe.length} safe`, `${h.mine.length} mines`]
+  if (h.patternId) bits.push(h.patternId)
+  return bits.join(' · ')
+}
 
 export function PlayScreen({
   settings,
@@ -50,6 +67,8 @@ export function PlayScreen({
   const bvRef = useRef<HTMLSpanElement>(null)
 
   const [nonce, setNonce] = useState(0)
+  /** Bumped whenever a new `Game` is constructed, so the hint effect re-subscribes. */
+  const [gameSeq, setGameSeq] = useState(0)
   const [phase, setPhase] = useState<Phase>('idle')
   const [result, setResult] = useState<Snapshot | null>(null)
 
@@ -60,6 +79,12 @@ export function PlayScreen({
   const [coachOpen, setCoachOpen] = useState(false)
   /** The frame loop needs the grades to recolour the ribbon (§8.3). */
   const gradesRef = useRef<CachedGrades | null>(null)
+
+  // §7.3 learning mode. The frame loop reads the hints; React state only drives
+  // the footer readout, so a hint arriving does not re-render the tree.
+  const hintsRef = useRef<Hints | null>(null)
+  const hintsDirtyRef = useRef(false)
+  const [hintInfo, setHintInfo] = useState<Hints | null>(null)
 
   settingsRef.current = settings
   const theme: Theme = dark ? DARK_THEME : LIGHT_THEME
@@ -86,9 +111,14 @@ export function PlayScreen({
     const p = PRESETS[settings.preset]
     const cfg: GameConfig = {
       preset: settings.preset, width: p.width, height: p.height, mines: p.mines,
-      noGuess: settings.noGuess, scheme: settings.scheme, chordSafety: settings.chordSafety,
+      noGuess: settings.noGuess, scheme: settings.scheme,
+      // §7.3 — chord safety is on by default in learning mode regardless of the
+      // play-mode setting; blowing up on a misflag teaches nothing here.
+      chordSafety: settings.chordSafety || settings.learning,
+      learning: settings.learning,
     }
     gameRef.current = new Game(cfg)
+    setGameSeq((n) => n + 1)
     setPhase('idle')
     setResult(null)
     const r = rendererRef.current
@@ -99,7 +129,7 @@ export function PlayScreen({
       r.fit(p, wrap.clientWidth, wrap.clientHeight)
       needsFullRef.current = true
     }
-  }, [settings.preset, settings.noGuess, settings.scheme, settings.chordSafety, nonce, theme])
+  }, [settings.preset, settings.noGuess, settings.scheme, settings.chordSafety, settings.learning, nonce, theme])
 
   useEffect(() => {
     rendererRef.current.setTheme(theme)
@@ -154,7 +184,22 @@ export function PlayScreen({
       const g = gameRef.current
       if (g) {
         if (g.board) {
-          if (needsFullRef.current) { r.drawAll(g.board); needsFullRef.current = false; g.dirty.clear() }
+          /*
+           * Learning mode repaints the whole board whenever anything changed and
+           * then stamps the hint layer once. Dirty-rect painting cannot be used
+           * here: the safe-cell fill is translucent, so re-stamping it over cells
+           * that were not repainted darkens them a little more every frame.
+           */
+          if (settingsRef.current.learning) {
+            if (needsFullRef.current || g.dirty.size || hintsDirtyRef.current) {
+              r.drawAll(g.board)
+              needsFullRef.current = false
+              hintsDirtyRef.current = false
+              g.dirty.clear()
+              const h = hintsRef.current
+              if (h && g.phase === 'playing') r.hints(g.board, h.safe, h.mine)
+            }
+          } else if (needsFullRef.current) { r.drawAll(g.board); needsFullRef.current = false; g.dirty.clear() }
           else if (g.dirty.size) { r.drawDirty(g.board, g.dirty); g.dirty.clear() }
         } else if (needsFullRef.current) {
           r.drawIdle(g.cfg); needsFullRef.current = false
@@ -203,6 +248,48 @@ export function PlayScreen({
     return () => { cancelAnimationFrame(raf); ro.disconnect(); detach() }
   }, [theme])
 
+  /**
+   * §7.3 — learning mode pre-solves in a worker on every state change and caches
+   * the result. Latency is acceptable here: it is the one mode where §7.2's
+   * input-lag rules deliberately do not apply.
+   */
+  useEffect(() => {
+    hintsRef.current = null
+    hintsDirtyRef.current = true
+    setHintInfo(null)
+    if (!settings.learning) return
+    const g = gameRef.current
+    if (!g) return
+
+    let alive = true
+    let seq = 0
+    const request = () => {
+      const b = g.board
+      if (!b || g.phase !== 'playing') {
+        hintsRef.current = null
+        hintsDirtyRef.current = true
+        setHintInfo(null)
+        return
+      }
+      const ticket = ++seq
+      hintsInWorker(solverView(b)).then(
+        (h) => {
+          // Fast play outruns the solver, and a late reply for an earlier
+          // position would paint stale certainties onto the current board.
+          if (!alive || ticket !== seq) return
+          hintsRef.current = h
+          hintsDirtyRef.current = true
+          setHintInfo(h)
+        },
+        () => { /* a dropped hint is not worth interrupting play for */ },
+      )
+    }
+
+    const unsub = g.subscribe(request)
+    request()
+    return () => { alive = false; unsub() }
+  }, [settings.learning, gameSeq])
+
   // N restarts. Skipped while a sheet is open so it cannot fire behind it.
   useEffect(() => {
     if (menuOpen || coachOpen) return
@@ -234,6 +321,13 @@ export function PlayScreen({
             </button>
           ))}
         </div>
+        <button
+          className="icon"
+          aria-pressed={settings.learning}
+          onClick={() => set('learning', !settings.learning)}
+          aria-label="Learning mode"
+          title="Learning mode — highlight every provable move"
+        >◎</button>
         <button className="icon" onClick={onOpenHistory} aria-label="History" title="History">◷</button>
         <button className="icon" onClick={onOpenSettings} aria-label="Settings">☰</button>
       </header>
@@ -283,10 +377,12 @@ export function PlayScreen({
 
       <footer className="foot">
         <button className="primary" onClick={newGame}>New game</button>
-        <span className="hint mono dim">
-          {phase === 'idle'
-            ? `${p.width}×${p.height} · ${p.mines} mines${settings.noGuess ? ' · no-guess' : ''}`
-            : `${PRESETS[settings.preset].label}${settings.noGuess ? ' · no-guess' : ' · guess'}`}
+        <span className={`hint mono ${settings.learning && hintInfo?.stuck ? 'warn' : 'dim'}`}>
+          {settings.learning
+            ? learningHint(phase, hintInfo)
+            : phase === 'idle'
+              ? `${p.width}×${p.height} · ${p.mines} mines${settings.noGuess ? ' · no-guess' : ''}`
+              : `${PRESETS[settings.preset].label}${settings.noGuess ? ' · no-guess' : ' · guess'}`}
         </span>
       </footer>
 

@@ -7,7 +7,7 @@ import { solverView } from '../engine/board.ts'
 
 const cfg = (over: Partial<GameConfig> = {}): GameConfig => ({
   preset: 'beginner', width: 9, height: 9, mines: 10,
-  noGuess: true, scheme: 'standard', chordSafety: false, ...over,
+  noGuess: true, scheme: 'standard', chordSafety: false, learning: false, ...over,
 })
 
 test('board is not created until the first click', () => {

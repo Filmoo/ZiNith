@@ -36,6 +36,8 @@ export interface GameConfig {
   scheme: Scheme
   /** §7.3 — on in learning, off in play. */
   chordSafety: boolean
+  /** §7.3 — live hints on. Recorded on the replay so PBs can exclude it. */
+  learning: boolean
 }
 
 export interface Snapshot {
@@ -127,7 +129,7 @@ export class Game {
       this.bv = bv.value
       this.openingOf = bv.openingOf
       this.bvCredited = new Uint8Array(this.size)
-      this.replay = newReplay(spec, this.cfg.preset, this.cfg.noGuess, this.cfg.scheme)
+      this.replay = newReplay(spec, this.cfg.preset, this.cfg.noGuess, this.cfg.scheme, this.cfg.learning)
       this.startPerf = performance.now()
       this.lastMoveMs = 0
       this.phase = 'playing'
