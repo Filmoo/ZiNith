@@ -205,14 +205,20 @@ long-press threshold, and left-click chording are all in the settings sheet.
 
 **Learn** and **Patterns** are real sections now, not just Play with a gear icon.
 
-- **Learn** (§7.3, §P8) runs a `LearningGame` — the same `Game` timed play uses, with
-  `open`/`flag`/`chord` gated on `provableIn`, the coach's own "what was knowable"
-  definition. A move that is strictly worse than the best available one is rejected
-  with a shake and a message naming why; every tied certainty is accepted, so the
-  arbitrary order HZiNi's greedy takes among independent openings is never punished.
-  The board overlays the witnesses and the subject of whichever deduction is
-  currently simplest, live, plus undo (rebuilds the board from the seed and replays
-  every event but the last — no separate undo stack).
+- **Learn** (§7.3, §P8) runs a `LearningGame` — the same `Game` timed play uses,
+  gated twice over. First on provability: guessing while a certainty exists is
+  rejected. Then on **measured click cost**, which is the half that teaches speed.
+  Opening eight cells one at a time when a single chord clears them is correct and
+  still wrong, and the block says so precisely: *"Costs 3 extra clicks. Chord the
+  6-cell group instead — it saves 4 clicks."* Flagging mines no chord will ever use
+  is rejected the same way. Every genuinely tied line is accepted, because regret is
+  measured per move rather than compared against one arbitrary "optimal" path.
+
+  The hint names the move and its price first (*"Chord — clears 6 cells in one click,
+  saves 4 clicks · 71 clicks left"*), then the pattern that proves it. Undo rebuilds
+  the board from the seed and replays every event but the last, so there is no
+  separate undo stack. Hints can be switched off in settings: wrong and wasteful
+  moves are still blocked, which turns it into recognition practice.
 - **Patterns** is the library, browsable at any time (§10.2): every catalogued
   pattern, grouped by tier, in the same derived order the curriculum uses, seeded
   from the real §10.1.2 measurement below rather than a second invented ranking.

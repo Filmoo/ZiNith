@@ -1,5 +1,6 @@
 import { neighborIndex } from '../neighbors.ts'
 import type { Board } from '../board.ts'
+import { FLAGGED, REVEALED } from '../types.ts'
 import { newSim, openSim, chordCells, type Sim } from './sim.ts'
 import { threeBV } from './threebv.ts'
 
@@ -40,7 +41,7 @@ export interface GreedyResult {
  * opening is free the moment that opening is clicked, so revealing it early
  * saves nothing. Only count an opening when its zero cells actually cascade.
  */
-function plainCost(cells: number[], b: Board, openingOf: Int32Array): number {
+export function plainClickCost(cells: number[], b: Board, openingOf: Int32Array): number {
   const cascaded = new Set<number>()
   let isolated = 0
   for (const c of cells) {
@@ -60,10 +61,51 @@ function plainCost(cells: number[], b: Board, openingOf: Int32Array): number {
  * the absolute numbers.
  */
 export function greedySolve(b: Board, firstClick: number, oracle: FlagOracle): GreedyResult {
+  const s: Sim = newSim(b)
+  openSim(b, s, firstClick)
+  const rest = greedyFrom(b, s, oracle)
+  return {
+    value: rest.value + 1,
+    path: [{ type: 'open', cell: firstClick }, ...rest.path],
+    blindOpens: rest.blindOpens,
+  }
+}
+
+/**
+ * A `Sim` mirroring a board's current state, so cost can be measured from where
+ * a game actually is rather than only from its first click.
+ *
+ * Note the asymmetry with the player's board: `opened`/`flagged` are copied as
+ * the player left them, but everything downstream still reads true mine
+ * positions from `b`. That is deliberate — this is the ZiNi family's measure of
+ * "clicks a perfect player needs from here", not a simulation of what the player
+ * can see.
+ */
+export function simFromBoard(b: Board): Sim {
+  const n = b.width * b.height
+  const s = newSim(b)
+  for (let i = 0; i < n; i++) {
+    if (b.state[i] === REVEALED) { s.opened[i] = 1; s.openedCount++ }
+    else if (b.state[i] === FLAGGED) s.flagged[i] = 1
+  }
+  return s
+}
+
+/**
+ * The greedy continuation from an arbitrary position. `s` is mutated.
+ *
+ * `openingOf` may be passed in when the caller is evaluating many candidate
+ * moves against the same board, since recomputing 3BV per candidate dominates
+ * otherwise.
+ */
+export function greedyFrom(
+  b: Board,
+  s: Sim,
+  oracle: FlagOracle,
+  openingOf: Int32Array = threeBV(b).openingOf,
+): GreedyResult {
   const ni = neighborIndex(b.width, b.height)
   const n = b.width * b.height
-  const s: Sim = newSim(b)
-  const openingOf = threeBV(b).openingOf
   const path: Click[] = []
   let clicks = 0
   let blindOpens = 0
@@ -77,9 +119,6 @@ export function greedySolve(b: Board, firstClick: number, oracle: FlagOracle): G
     return out
   }
 
-  openSim(b, s, firstClick)
-  path.push({ type: 'open', cell: firstClick })
-  clicks++
   oracle.refresh(s)
 
   for (;;) {
@@ -94,7 +133,7 @@ export function greedySolve(b: Board, firstClick: number, oracle: FlagOracle): G
       const cells = chordCells(b, s, c)
       if (cells.length === 0) continue
       const cost = needed.length + 1
-      const benefit = plainCost(cells, b, openingOf) - cost
+      const benefit = plainClickCost(cells, b, openingOf) - cost
       if (benefit <= 0) continue
       if (benefit > bestBenefit || (benefit === bestBenefit && cells.length > bestCells)) {
         best = c

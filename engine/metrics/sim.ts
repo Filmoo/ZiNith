@@ -49,18 +49,9 @@ export function chordCells(b: Board, s: Sim, cell: number): number[] {
   return out
 }
 
-/**
- * What those same cells would cost with plain left clicks: one per distinct
- * opening plus one for every cell no opening reaches. Chording is only worth
- * doing when it beats this, which is what keeps ZiNi <= 3BV.
- */
-export function plainClickCost(cells: number[], openingOf: Int32Array): number {
-  const openings = new Set<number>()
-  let isolated = 0
-  for (const c of cells) {
-    const o = openingOf[c]
-    if (o === -1) isolated++
-    else openings.add(o)
-  }
-  return openings.size + isolated
-}
+// The "what would these cells cost with plain left clicks" helper lives in
+// greedy.ts as `plainClickCost`. An earlier copy here counted any cell with an
+// opening id as costing an opening click, which over-credits chords: a numbered
+// cell on an opening's edge is free once that opening cascades, so only zero
+// cells may be counted. Deleted rather than left exported, so the wrong version
+// cannot be picked up by mistake.

@@ -138,32 +138,114 @@ export class BoardRenderer {
     g.drawImage(this.atlas!, this.spriteFor(b, i) * cs, 0, cs, cs, x, y, cs, cs)
   }
 
-  /**
-   * Coach overlay layer (§8.3): witness shading and subject boxes, for the
-   * post-game ribbon and for learning mode's live hint (§P8).
-   *
-   * Colours come from the theme's own number palette rather than fixed hex, so
-   * dark mode is handled for free: witnesses (the numbers being read) shade in
-   * canonical "1" blue, and subjects box in canonical "2" green when the verdict
-   * is safe or the existing alert red when it is a mine — the same red already
-   * used for detonated cells and wrong flags.
-   */
-  overlay(b: Board, witnesses: number[], subjects: number[], verdict: 'safe' | 'mine') {
-    const g = this.g
-    if (!g) return
+  private cellXY(b: { width: number }, i: number): readonly [number, number] {
     const cs = this.atlasCs
-    const px = (i: number) => [
+    return [
       Math.round(this.vp.ox * this.dpr) + (i % b.width) * cs,
       Math.round(this.vp.oy * this.dpr) + Math.floor(i / b.width) * cs,
     ] as const
+  }
+
+  /** A rounded rect path, for rings that read as deliberate rather than as a grid. */
+  private ringPath(x: number, y: number, size: number, inset: number, radius: number) {
+    const g = this.g!
+    const x0 = x + inset, y0 = y + inset, s = size - inset * 2
+    const r = Math.min(radius, s / 2)
+    g.beginPath()
+    g.moveTo(x0 + r, y0)
+    g.arcTo(x0 + s, y0, x0 + s, y0 + s, r)
+    g.arcTo(x0 + s, y0 + s, x0, y0 + s, r)
+    g.arcTo(x0, y0 + s, x0, y0, r)
+    g.arcTo(x0, y0, x0 + s, y0, r)
+    g.closePath()
+  }
+
+  /**
+   * Coach overlay (§8.3), also learning mode's live hint (§P8).
+   *
+   * Deliberately draws *rings*, not filled tints. A translucent fill over a
+   * witness washes out the very number the player is being asked to read, which
+   * defeats the purpose — the overlay has to point at the evidence without
+   * hiding it. Everything here therefore sits inside the cell's edges, and the
+   * only fills are on cells that are still face-down and have nothing to hide.
+   *
+   * Colours come from the theme's own palette, so dark mode needs no special
+   * case: witnesses take canonical "1" blue, safe subjects canonical "2" green,
+   * mine subjects the alert red already used for detonations and wrong flags.
+   */
+  overlay(
+    b: Board,
+    layers: {
+      /** Revealed numbers forming the proof. Ringed, never covered. */
+      witnesses?: number[]
+      /** Cells proven safe. */
+      safe?: number[]
+      /** Cells proven to be mines. */
+      mines?: number[]
+      /** The single cell the player should act on next. */
+      focus?: number
+      /** What acting on `focus` means, which changes its marker. */
+      focusKind?: 'open' | 'flag' | 'chord'
+    },
+  ) {
+    const g = this.g
+    if (!g) return
+    const cs = this.atlasCs
+    const hair = Math.max(1.5, cs * 0.055)
     g.save()
-    g.globalAlpha = 0.26
-    g.fillStyle = this.theme.numbers[1]
-    for (const w of witnesses) { const [x, y] = px(w); g.fillRect(x, y, cs, cs) }
-    g.globalAlpha = 0.95
-    g.strokeStyle = verdict === 'safe' ? this.theme.numbers[2] : this.theme.alert
-    g.lineWidth = Math.max(2, cs * 0.09)
-    for (const s of subjects) { const [x, y] = px(s); g.strokeRect(x + cs * 0.12, y + cs * 0.12, cs * 0.76, cs * 0.76) }
+    g.lineJoin = 'round'
+
+    // Witnesses: a hairline ring just inside the cell edge. Reads as "look at
+    // these numbers" while leaving the glyphs fully legible.
+    if (layers.witnesses?.length) {
+      g.strokeStyle = this.theme.numbers[1]
+      g.lineWidth = hair
+      g.globalAlpha = 0.85
+      for (const w of layers.witnesses) {
+        const [x, y] = this.cellXY(b, w)
+        this.ringPath(x, y, cs, cs * 0.1, cs * 0.18)
+        g.stroke()
+      }
+    }
+
+    /*
+     * Subjects. These are face-down cells, so a wash costs no information — but
+     * it stays faint: at ~26px a cell is small enough that a strong fill plus a
+     * ring reads as one solid block of colour rather than as a marked cell.
+     */
+    const subject = (cells: number[], colour: string) => {
+      g.strokeStyle = colour
+      g.fillStyle = colour
+      g.lineWidth = hair
+      for (const c of cells) {
+        const [x, y] = this.cellXY(b, c)
+        this.ringPath(x, y, cs, cs * 0.13, cs * 0.2)
+        g.globalAlpha = 0.1
+        g.fill()
+        g.globalAlpha = 0.9
+        g.stroke()
+      }
+    }
+    if (layers.safe?.length) subject(layers.safe, this.theme.numbers[2])
+    if (layers.mines?.length) subject(layers.mines, this.theme.alert)
+
+    /*
+     * Focus marker: a filled dot at the centre.
+     *
+     * Not corner brackets — they were tried and at this cell size their arms
+     * almost meet, so together with the subject ring the cell read as a solid
+     * colour swatch. A dot is unmistakably "this one" and cannot merge with the
+     * ring around it.
+     */
+    if (layers.focus !== undefined) {
+      const [x, y] = this.cellXY(b, layers.focus)
+      const kind = layers.focusKind ?? 'open'
+      g.globalAlpha = 1
+      g.fillStyle = kind === 'flag' ? this.theme.alert : this.theme.numbers[2]
+      g.beginPath()
+      g.arc(x + cs / 2, y + cs / 2, Math.max(2, cs * 0.13), 0, Math.PI * 2)
+      g.fill()
+    }
     g.restore()
   }
 }

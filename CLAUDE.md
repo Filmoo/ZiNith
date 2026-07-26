@@ -97,10 +97,38 @@ so the Patterns screen orders itself off a real measurement rather than tier+dep
 re-run and update that file whenever the solver or the pattern signature changes.
 
 `LearningGame` (`src/game/learningGame.ts`) subclasses `Game` rather than duplicating its
-methods: `open`/`flag`/`chord`/`undo` are overridden to gate on `provableIn` and delegate to
+methods: `open`/`flag`/`chord`/`undo` are overridden to gate the move and delegate to
 `super`. This is safe because `Game`'s fields are TypeScript-private, not real JS `#private` —
 they exist as ordinary properties at runtime, so the base class's own methods still see and
 mutate them correctly when called via `this` on a subclass instance.
+
+## Move optimality (`engine/coach/optimal.ts`)
+
+Provability is not enough to teach a speedrunner. Opening eight cells one at a time when one
+chord clears them is *correct* and still wrong, so learning mode gates on measured click cost
+as well (§7.3's "strictly worse by click count").
+
+- **`planFrom`** runs the HZiNi greedy from the *current* position — that is what
+  `simFromBoard` and `greedyFrom` exist for; `greedySolve` only ever started from a first
+  click. Its next action becomes `step`, and every move in `step` is on-plan.
+- **`regretOf`** short-circuits to 0 for on-plan moves and otherwise costs the move exactly
+  (`costOf` = the click plus the greedy continuation after it). Nothing is ever called worse
+  without being measured, which is how §7.3's caveat is satisfied: genuinely tied lines all
+  score 0, so the greedy's arbitrary tie-breaking is never reported as the player's mistake.
+- **`bestAchievable`, not `best`, is the baseline.** The greedy is omniscient, so its own next
+  click can be a cell that is merely lucky rather than provable. Scoring the player against a
+  line they cannot find would mark *every* legal move as a mistake — §7.3's infuriating case.
+  When the plan's step is not provable, `analyzePosition` falls back to the cheapest move the
+  player can justify and makes that the baseline.
+- **Never cost-block when nothing is provable.** The cost model knows where the mines are, so
+  vetoing a forced guess would leak them.
+- Among equally-optimal opens the advice picks the one with the **simplest proof**, otherwise
+  the recommendation is whatever the greedy emitted first and can cite a twelve-witness tank
+  enumeration while a plain 1-1 sits available.
+
+§7.3 assumed blocking would need a worker. It does not: `npm run bench:optimal` reports p90
+~4ms per expert position, inside a frame, so learning mode analyses synchronously. Timed play
+still never calls any of it.
 
 Rules that are load-bearing, not stylistic:
 

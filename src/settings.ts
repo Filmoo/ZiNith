@@ -17,6 +17,12 @@ export interface Settings {
   chordSafety: boolean
   theme: ThemeChoice
   haptics: boolean
+  /**
+   * Learning mode only. Off still blocks wrong and wasteful moves, it just stops
+   * showing the answer first — which is recognition practice rather than a
+   * guided walkthrough.
+   */
+  showHints: boolean
 }
 
 export const DEFAULTS: Settings = {
@@ -28,6 +34,7 @@ export const DEFAULTS: Settings = {
   chordSafety: false,
   theme: 'system',
   haptics: true,
+  showHints: true,
 }
 
 const KEY = 'zinith.settings.v1'
@@ -66,6 +73,7 @@ function parse(raw: string | null): Settings {
     chordSafety: bool(o.chordSafety, DEFAULTS.chordSafety),
     theme: pick(o.theme, THEMES, DEFAULTS.theme),
     haptics: bool(o.haptics, DEFAULTS.haptics),
+    showHints: bool(o.showHints, DEFAULTS.showHints),
   }
 }
 

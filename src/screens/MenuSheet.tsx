@@ -74,6 +74,15 @@ export function MenuSheet({
         </div>
 
         <div className="group">
+          <span className="label">Learning mode</span>
+          <div className="card">
+            <Row title="Show hints" sub="Off still blocks wrong and wasteful moves — recognition practice.">
+              <Switch on={settings.showHints} onChange={(v) => set('showHints', v)} label="Show hints" />
+            </Row>
+          </div>
+        </div>
+
+        <div className="group">
           <span className="label">{coarse ? 'Touch controls' : 'Mouse controls'}</span>
           <div className="card keys">
             {coarse ? (

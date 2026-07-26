@@ -235,22 +235,22 @@ body {
    bottom-anchored pill, since the two can be on screen together the moment a
    blocked move happens mid-explanation. */
 
-.hint-card {
-  position: absolute;
-  top: var(--s3);
-  left: var(--s3);
-  right: var(--s3);
-  max-width: 460px;
-  margin-inline: auto;
-  padding: var(--s3) var(--s4);
-  border-radius: 12px;
+/* A strip under the board rather than a panel over it. Floating it above the
+   canvas hid the very cells the overlay was pointing at. */
+.hint-strip {
+  flex: none;
+  min-height: 56px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 3px;
+  padding: var(--s2) var(--s4);
   background: var(--panel);
-  border: 1px solid var(--rule);
-  box-shadow: var(--shadow);
+  border-top: 1px solid var(--rule);
   font-size: 13px;
-  animation: fade 140ms ease-out;
 }
-.hint-card.idle { text-align: center; color: var(--ink-dim); }
+.hint-strip .rowsub { color: var(--ink-dim); }
+.hint-strip .rowtitle { font-weight: 600; }
 
 @keyframes shake {
   10%, 90% { transform: translateX(-1px); }

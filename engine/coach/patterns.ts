@@ -187,7 +187,16 @@ export function patternOf(view: SolverView, d: Deduction): PatternMatch {
   }
 
   const pattern = BY_ID.get(id) ?? synthesise(id, ws.length)
-  return { id, pattern, depth: Math.max(1, ws.length), deduction: min }
+  /*
+   * Depth is §10.1.3's minimum witness count. That measure does not apply to
+   * `global-count`, whose real premise is the remaining mine budget rather than
+   * any set of numbers — `minimizeWitnesses` skips it for exactly that reason, so
+   * its witness list is left un-minimised and can run to dozens of cells.
+   * Reporting "25 numbers" for what is really one counting fact is simply wrong,
+   * so it is fixed at 1.
+   */
+  const depth = id === 'global-count' ? 1 : Math.max(1, ws.length)
+  return { id, pattern, depth, deduction: min }
 }
 
 /**

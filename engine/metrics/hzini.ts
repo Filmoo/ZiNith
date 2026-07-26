@@ -13,16 +13,17 @@ export interface HZiniResult {
 }
 
 /**
- * The same greedy as ZiNi, but it may only flag mines the solver can prove
- * from what is currently revealed. Recomputed after every action.
+ * The flag oracle HZiNi runs on: a mine may only be flagged once the solver can
+ * prove it from what is currently revealed.
  *
- * HZiNi >= ZiNi always: strictly less information, same algorithm.
+ * Exported because learning mode needs the same restriction — a hint that says
+ * "flag that" about a mine no rule can prove yet would be telling the player to
+ * guess.
  */
-export function hzini(b: Board, firstClick: number): HZiniResult {
+export function solverOracle(b: Board): FlagOracle {
   const n = b.width * b.height
-
-  const oracle: FlagOracle = {
-    known: new Set<number>(),
+  const known = new Set<number>()
+  return {
     refresh(sim: Sim) {
       const state = new Uint8Array(n)
       for (let i = 0; i < n; i++) {
@@ -30,17 +31,25 @@ export function hzini(b: Board, firstClick: number): HZiniResult {
       }
       const view: SolverView = { width: b.width, height: b.height, state, adj: b.adj, totalMines: b.mineCount }
       const r = solve(view)
-      this.known.clear()
+      known.clear()
       for (const d of r.deductions) {
         if (d.verdict !== 'mine') continue
-        for (const c of d.subject) this.known.add(c)
+        for (const c of d.subject) known.add(c)
       }
     },
     canFlag(cell: number) {
-      return this.known.has(cell)
+      return known.has(cell)
     },
-  } as FlagOracle & { known: Set<number> }
+  }
+}
 
-  const r = greedySolve(b, firstClick, oracle)
+/**
+ * The same greedy as ZiNi, but it may only flag mines the solver can prove
+ * from what is currently revealed. Recomputed after every action.
+ *
+ * HZiNi >= ZiNi always: strictly less information, same algorithm.
+ */
+export function hzini(b: Board, firstClick: number): HZiniResult {
+  const r = greedySolve(b, firstClick, solverOracle(b))
   return { value: r.value, path: r.path, approximation: true, blindOpens: r.blindOpens }
 }
